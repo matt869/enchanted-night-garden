@@ -266,9 +266,19 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
     camera.position.set(0, 1.8, 12);
     camera.lookAt(0, 0.8, 0);
 
-    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    // Phones are the reason for every choice on these three lines. Each frame
+    // costs seven full-screen passes (scene, bright pass, four blur passes,
+    // composite), so every pixel is paid for seven times and a retina phone
+    // will cook itself at native resolution. Hence the lower ceiling below.
+    // MSAA is off there too and costs nothing visually: the scene is drawn into
+    // a plain WebGLRenderTarget, which is never multisampled, so `antialias`
+    // only ever applied to the final full-screen quad, which cannot alias.
+    const MOBILE = (window.matchMedia && window.matchMedia('(pointer:coarse)').matches) ||
+                   /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: !MOBILE,
+                                               powerPreference: 'low-power' });
     renderer.setSize(w, h);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, MOBILE ? 1.5 : 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputEncoding = THREE.sRGBEncoding;
@@ -2475,17 +2485,42 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
     hideBtn.addEventListener('click',toggleHide);
 
     // ---------------- Animate ----------------
-    let lastNow=performance.now();
+    // Frame pacing. Left alone, requestAnimationFrame runs as fast as the
+    // display: 120Hz on a ProMotion iPhone, which doubles the GPU work of an
+    // already fill-rate-heavy scene and gets the phone hot within minutes.
+    // So we cap it, and once nobody has touched anything for a few seconds we
+    // halve it again — the garden only drifts when idle, and 30fps is plenty
+    // for drifting. Any real input snaps it straight back to full rate.
+    const FPS_ACTIVE=60, FPS_IDLE=30, IDLE_AFTER_MS=5000;
+    let lastNow=performance.now(), lastInput=lastNow, paused=false;
+
+    function noteInput(){ lastInput=performance.now(); }
+    ['pointerdown','pointermove','wheel','keydown','touchstart','touchmove']
+        .forEach(function(e){ window.addEventListener(e,noteInput,{passive:true}); });
+
+    // Stop rendering outright when the app is backgrounded or the screen locks.
+    document.addEventListener('visibilitychange',function(){
+        if(document.hidden){ paused=true; }
+        else if(paused){ paused=false; lastNow=performance.now(); noteInput(); animate(); }
+    });
+
     function animate(){
+        if(paused) return;                 // resumed by visibilitychange
         requestAnimationFrame(animate);
         const nowMs=performance.now();
+        const budget=1000/((nowMs-lastInput>IDLE_AFTER_MS)?FPS_IDLE:FPS_ACTIVE)-1;
+        if(nowMs-lastNow<budget) return;   // too early — skip, keeps lastNow honest
         let dtReal=(nowMs-lastNow)/1000; lastNow=nowMs;
         if(dtReal>0.1) dtReal=0.1;
-        time+=0.012;
+        // Everything below was written assuming a 60fps frame. fs restates each
+        // fixed per-frame step in those units so the garden moves at the same
+        // speed whatever rate we settle on.
+        const fs=Math.max(0.2,Math.min(3,dtReal*60));
+        time+=0.012*fs;
 
         const F=FLOWERS[currentFlower], m=F.motion||{};
 
-        bloomT=Math.max(0,Math.min(1, bloomT + bloomDir*(bloomDir>0?0.022:0.030)));
+        bloomT=Math.max(0,Math.min(1, bloomT + bloomDir*(bloomDir>0?0.022:0.030)*fs));
         // ease out when opening, ease in when closing — feels like it relaxes shut
         const bloomEase = bloomDir>0 ? 1-Math.pow(1-bloomT,3) : bloomT*bloomT*(3-2*bloomT);
 
@@ -2531,7 +2566,7 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         const bob=(m.bob||0)*Math.sin(time*(m.bobs||0.6));
         const pulse=1+(m.pulse||0)*Math.sin(time*(m.pulses||0.6));
 
-        if(!dragging){ idle+=1; if(idle>200) rotY+=0.0011; }
+        if(!dragging){ idle+=fs; if(idle>200) rotY+=0.0011*fs; }
         flowerGroup.rotation.y=rotY;
         flowerGroup.rotation.x=rotX+tiltX;
         flowerGroup.rotation.z=tiltZ;
@@ -2540,7 +2575,7 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
 
         const gb=F.glowBoost||1;
         centerGlow.intensity=(2.4+1.0*Math.sin(time*1.25))*gb+burstFlash*3;
-        burstFlash*=0.94;
+        burstFlash*=Math.pow(0.94,fs);
         rimLight.intensity=0.8+0.3*Math.sin(time*1.4);
         backRim.intensity=0.55+0.25*Math.sin(time*1.7);
         movingLight.position.set(1.4*Math.sin(time*0.7),1.5,1.1*Math.cos(time*0.55));
@@ -2552,20 +2587,20 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         const pp=fpGeo.attributes.position.array;
         for(let i=0;i<fpCount;i++){
             const idx=i*3, rad=Math.hypot(pp[idx],pp[idx+2]);
-            const ang=Math.atan2(pp[idx+2],pp[idx])+0.0009*fpVel[i];
+            const ang=Math.atan2(pp[idx+2],pp[idx])+0.0009*fpVel[i]*fs;
             pp[idx]=Math.cos(ang)*rad; pp[idx+2]=Math.sin(ang)*rad;
-            pp[idx+1]-=0.0016*fpVel[i]+0.0006;
-            pp[idx+1]+=Math.sin(time*1.3+i)*0.0009;
-            pp[idx]+=windKick*0.05;
+            pp[idx+1]-=(0.0016*fpVel[i]+0.0006)*fs;
+            pp[idx+1]+=Math.sin(time*1.3+i)*0.0009*fs;
+            pp[idx]+=windKick*0.05*fs;
             if(pp[idx+1]<-1.8){ pp[idx+1]=3.4; }
         }
         fpGeo.attributes.position.needsUpdate=true;
 
-        glitter.rotation.y+=0.0018; glitter.rotation.x=Math.sin(time*0.3)*0.09;
+        glitter.rotation.y+=0.0018*fs; glitter.rotation.x=Math.sin(time*0.3)*0.09;
         glitter.material.opacity=0.75+0.25*Math.sin(time*2.0);
-        pollen.rotation.y-=0.001; pollen.rotation.x=Math.cos(time*0.28)*0.07;
-        dust.rotation.y+=0.0012; dust.rotation.x=Math.sin(time*0.4)*0.06;
-        stars.rotation.y+=0.0004; starMat.size=0.09+Math.sin(time*1.5)*0.015;
+        pollen.rotation.y-=0.001*fs; pollen.rotation.x=Math.cos(time*0.28)*0.07;
+        dust.rotation.y+=0.0012*fs; dust.rotation.x=Math.sin(time*0.4)*0.06;
+        stars.rotation.y+=0.0004*fs; starMat.size=0.09+Math.sin(time*1.5)*0.015;
 
         // fireflies wander and blink
         for(let i=0;i<fireflies.length;i++){
@@ -2639,7 +2674,7 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
             }
         }
 
-        currentZoom+=(targetZoom-currentZoom)*0.1;
+        currentZoom+=(targetZoom-currentZoom)*(1-Math.pow(0.9,fs));
         camera.position.z=currentZoom; camera.position.y=1.5+currentZoom*0.02;
         camera.lookAt(0,0.85,0);
         // keepsake reveal: only legible once the viewer has zoomed in very close
