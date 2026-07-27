@@ -1,0 +1,14 @@
+{
+  "name": "enchanted-night-garden",
+  "compatibility_date": "2026-07-27",
+  // Static-assets-only Worker: there is no `main` script and no build step.
+  // The page lives in ./public so that only it is published -- pointing the
+  // assets directory at the repo root would also upload .git. Without this
+  // block the deploy fails: "Could not detect a directory containing static files".
+  "assets": {
+    "directory": "./public"
+  },
+  "observability": {
+    "enabled": true
+  }
+}

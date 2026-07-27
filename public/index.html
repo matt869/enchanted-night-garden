@@ -704,29 +704,37 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
     }
 
     function buildDahlia(){
-        // quilled, folded pointed petals in dense spiral rings (cafe-au-lait blush)
+        // Ball dahlia (cafe-au-lait blush): a neat sphere with a flattened top,
+        // every petal rolled inward into a tiny tube.
         const pal=[
             ['#e8946e','#f7bfa0','#fde9da'],['#ec9d7c','#f9c8ac','#fdece0'],
             ['#f0a88c','#fad2ba','#fef0e6'],['#f4b49c','#fcdcc8','#fef4ec']];
         const tex=pal.map(function(p){return track(makePetalTexture({base:p[0],mid:p[1],tip:p[2],
             midrib:'rgba(255,240,230,0.4)',mottle:0.04}));});
-        const golden = 2.39996;
-        const rings=[
-            {count:16,len:3.1, wd:0.62,elev:12,ci:3},{count:15,len:2.75,wd:0.58,elev:22,ci:3},
-            {count:14,len:2.4, wd:0.55,elev:32,ci:2},{count:13,len:2.05,wd:0.5, elev:42,ci:2},
-            {count:12,len:1.7, wd:0.46,elev:52,ci:1},{count:11,len:1.4, wd:0.42,elev:61,ci:1},
-            {count:10,len:1.1, wd:0.38,elev:69,ci:0},{count:9, len:0.85,wd:0.33,elev:76,ci:0},
-            {count:8, len:0.6, wd:0.28,elev:82,ci:0}];
-        rings.forEach(function(r,idx){
-            addRing({count:r.count,azOffset:idx*golden,elevStart:r.elev,opacity:0.97,
-                emissive:pal[r.ci][0],emissiveInt:0.16,shininess:55,
-                texture:tex[r.ci],twistAmt:0.25,jitter:0.1,flutter:0.7,
-                geo:{len:r.len,maxWidth:r.wd,curl:0.5,fold:1.25,tipPinch:0.55,widthPow:0.9,segU:36,segV:18}});
+        const golden=2.39996, R=1.62;
+        // Rings run from below the equator up to the crown. Petal length is very
+        // nearly constant, so every tip lands on the same radius -- that is what
+        // makes the head read as a ball instead of a cone. The old version shrank
+        // length with height, which is why it tapered.
+        const elevs=[-12,0,13,26,38,50,61,71,79,86];
+        elevs.forEach(function(e,idx){
+            // density follows cos(elevation), keeping the surface evenly covered
+            const count=Math.max(5,Math.round(18*Math.cos(e*Math.PI/180)));
+            // crown petals pull in slightly, flattening the top of the ball
+            const len=R*(1-0.26*Math.max(0,(e-58)/32));
+            const ci=idx<3?3:(idx<6?2:(idx<8?1:0));
+            addRing({count:count,azOffset:idx*golden,elevStart:e,opacity:0.97,
+                emissive:pal[ci][0],emissiveInt:0.16,shininess:55,
+                texture:tex[ci],twistAmt:0.22,jitter:0.08,flutter:0.55,
+                // high fold + cup with a pinched tip rolls each petal into a tube
+                geo:{len:len,maxWidth:0.40,curl:0.46,cup:1.15,fold:1.9,tipPinch:0.62,
+                     widthPow:1.0,segU:34,segV:18}});
         });
         coreGroup=new THREE.Group(); flowerGroup.add(coreGroup);
-        const bud=new THREE.Mesh(track(new THREE.SphereGeometry(0.22,20,20)),
+        // the centre is fully enclosed on a ball dahlia, so this is just a filler
+        const bud=new THREE.Mesh(track(new THREE.SphereGeometry(0.16,16,16)),
             track(new THREE.MeshPhongMaterial({color:0xf4b49c,emissive:0xa05530,emissiveIntensity:0.25})));
-        bud.position.y=0.12; bud.scale.y=0.8; coreGroup.add(bud);
+        bud.position.y=0.10; bud.scale.y=0.85; coreGroup.add(bud);
         addInnerSparkles(600,1.0,0.7,0xffcfa8);
         simpleStem(0.5,3.2);
     }
@@ -974,16 +982,18 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
         const texIn=track(makePetalTexture({base:'#f9cc5c',mid:'#ec5a30',tip:'#c22a1c',
             midStop:0.44,flames:{rgb:'120,12,10',count:6,alpha:0.20},mottle:0.05,
             midrib:'rgba(255,224,150,0.4)',paleEdge:false}));
-        // three outer + three inner petals, tilted just past vertical so the tips
-        // sweep up and slightly outward into the classic flared goblet.
-        addRing({count:3,elevStart:112,opacity:0.98,emissive:'#c23018',emissiveInt:0.16,shininess:150,
-            texture:tex,twist:false,jitter:0.05,flutter:0.55,
-            geo:{len:3.15,maxWidth:0.98,curl:0.42,cup:0.30,fold:0.35,recurve:0.10,tipPinch:0.42,
-                 widthPow:0.98,ruffle:0.03,segU:56,segV:28}});
-        addRing({count:3,azOffset:Math.PI/3,elevStart:108,opacity:0.98,emissive:'#c23018',emissiveInt:0.16,shininess:150,
-            texture:texIn,twist:false,jitter:0.05,flutter:0.55,
-            geo:{len:2.92,maxWidth:1.06,curl:0.46,cup:0.32,fold:0.38,recurve:0.06,tipPinch:0.42,
-                 widthPow:0.99,ruffle:0.03,segU:56,segV:28}});
+        // Cup-shaped, the classic tulip form: six smooth tepals in two whorls of
+        // three, standing upright and curving INWARD at the tips so the bloom
+        // closes into a deep cup. Recurve and ruffle are both zero on purpose --
+        // flared tips would read as lily-flowered, wavy edges as parrot.
+        addRing({count:3,elevStart:103,opacity:0.98,emissive:'#c23018',emissiveInt:0.16,shininess:150,
+            texture:tex,twist:false,jitter:0.04,flutter:0.5,
+            geo:{len:3.05,maxWidth:1.12,curl:0.60,cup:0.64,fold:0.22,recurve:0,tipPinch:0.30,
+                 widthPow:0.86,ruffle:0,segU:56,segV:28}});
+        addRing({count:3,azOffset:Math.PI/3,elevStart:99,opacity:0.98,emissive:'#c23018',emissiveInt:0.16,shininess:150,
+            texture:texIn,twist:false,jitter:0.04,flutter:0.5,
+            geo:{len:2.86,maxWidth:1.20,curl:0.66,cup:0.70,fold:0.24,recurve:0,tipPinch:0.28,
+                 widthPow:0.88,ruffle:0,segU:56,segV:28}});
         coreGroup=new THREE.Group(); flowerGroup.add(coreGroup);
         // pale-green three-lobed pistil
         const pist=new THREE.Mesh(track(new THREE.CylinderGeometry(0.055,0.10,0.62,3)),
@@ -1094,36 +1104,63 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
         const petTex2=track(makePetalTexture({base:'#d97f08',mid:'#f7b92e',tip:'#ffd75e',midStop:0.42,
             midrib:'rgba(160,80,0,0.35)',mottle:0.04,paleEdge:false}));
         const sepTex=track(makePetalTexture({base:'#274a22',mid:'#3f7038',tip:'#5c9450',mottle:0.05,paleEdge:false}));
-        addRing({count:17,elevStart:70,opacity:0.98,emissive:'#cc7a00',emissiveInt:0.22,shininess:40,
-            texture:petTex,twist:false,jitter:0.1,flutter:0.7,
-            geo:{len:2.6,maxWidth:0.72,curl:0.35,fold:0.5,tipPinch:0.45,widthPow:0.8,segU:36,segV:14}});
-        addRing({count:17,azOffset:Math.PI/17,elevStart:60,opacity:0.97,emissive:'#b96e00',emissiveInt:0.2,shininess:40,
-            texture:petTex2,twist:false,jitter:0.1,flutter:0.7,
-            geo:{len:2.35,maxWidth:0.66,curl:0.4,fold:0.5,tipPinch:0.45,widthPow:0.8,segU:36,segV:14}});
+        // Ray florets: lance-shaped blades set radially, like rays of light.
+        // 21 + 13 = 34 rays, keeping the whole head on the Fibonacci sequence.
+        addRing({count:21,elevStart:74,opacity:0.98,emissive:'#cc7a00',emissiveInt:0.22,shininess:40,
+            texture:petTex,twist:false,jitter:0.08,flutter:0.7,
+            geo:{len:2.75,maxWidth:0.66,curl:0.30,fold:0.42,tipPinch:0.60,widthPow:0.70,segU:36,segV:14}});
+        addRing({count:13,azOffset:Math.PI/21,elevStart:64,opacity:0.97,emissive:'#b96e00',emissiveInt:0.2,shininess:40,
+            texture:petTex2,twist:false,jitter:0.08,flutter:0.7,
+            geo:{len:2.45,maxWidth:0.60,curl:0.34,fold:0.42,tipPinch:0.58,widthPow:0.70,segU:36,segV:14}});
         addRing({count:14,azOffset:0.3,elevStart:80,opacity:0.9,emissive:'#1a3a16',emissiveInt:0.12,shininess:30,
             texture:sepTex,twist:false,jitter:0.12,flutter:0.5,scale:0.85,
             geo:{len:1.7,maxWidth:0.42,curl:0.3,tipPinch:0.5,widthPow:0.9,segU:24,segV:10}});
         coreGroup=new THREE.Group(); flowerGroup.add(coreGroup);
-        const disc=new THREE.Mesh(track(new THREE.SphereGeometry(0.98,36,24)),
+        // Central disk: a flat, only slightly convex plate rather than a dome.
+        const disc=new THREE.Mesh(track(new THREE.SphereGeometry(1.34,48,28)),
             track(new THREE.MeshPhongMaterial({color:0x4a2a10,emissive:0x1c0e04,shininess:18})));
-        disc.scale.y=0.34; disc.position.y=0.05; coreGroup.add(disc);
-        const seedGeo=track(new THREE.SphereGeometry(0.042,8,8));
+        disc.scale.y=0.17; disc.position.y=0.06; coreGroup.add(disc);
+
+        // Seed spirals: seating every seed one golden angle from the last is what
+        // makes the interlocking left- and right-turning families appear on their
+        // own -- at this density the dominant parastichies are the 34 / 55 pair.
+        // Each seed is elongated and turned along its arm so the spirals read.
+        const seedGeo=track(new THREE.SphereGeometry(0.046,8,8));
         const seedMatA=track(new THREE.MeshPhongMaterial({color:0x5c3417,emissive:0x241004,shininess:70}));
         const seedMatB=track(new THREE.MeshPhongMaterial({color:0x8a5a24,emissive:0x35200a,shininess:70}));
-        const GA=Math.PI*(3-Math.sqrt(5));           // the golden angle
-        for(let i=0;i<320;i++){
-            const r=0.052*Math.sqrt(i); if(r>0.9) break;
-            const a=i*GA;
+        const GA=Math.PI*(3-Math.sqrt(5));           // golden angle, ~137.5 degrees
+        // Seed count scales with disk area so the packing density stays constant
+        // as the centre grows -- otherwise a bigger disk just looks sparse.
+        const SEEDS=580, RMAX=1.26;
+        for(let i=0;i<SEEDS;i++){
+            const r=RMAX*Math.sqrt((i+0.5)/SEEDS);   // sqrt keeps the packing even
+            const a=i*GA, rn=r/RMAX;
             const s=new THREE.Mesh(seedGeo,(i%2)?seedMatA:seedMatB);
-            s.position.set(Math.cos(a)*r, 0.35-0.19*Math.pow(r/0.9,2), Math.sin(a)*r);
+            s.position.set(Math.cos(a)*r, 0.31-0.15*rn*rn, Math.sin(a)*r);
+            s.rotation.y=-a;                         // long axis follows the spiral
+            s.scale.set(0.80,0.62,1.40);
             coreGroup.add(s);
+        }
+
+        // Disk florets: every "seed" is really a tiny tubular flower. A band of
+        // them stands open across the outer disk, which is what gives the centre
+        // its velvet texture instead of a bare plate.
+        const florGeo=track(new THREE.CylinderGeometry(0.020,0.030,0.10,6));
+        const florMat=track(new THREE.MeshPhongMaterial({color:0x7d4c1a,emissive:0x2c1707,shininess:40}));
+        for(let i=0;i<190;i++){
+            const r=RMAX*Math.sqrt(0.34+0.66*((i+0.5)/190));
+            const a=i*GA, rn=r/RMAX;
+            const fl=new THREE.Mesh(florGeo,florMat);
+            fl.position.set(Math.cos(a)*r, 0.345-0.15*rn*rn, Math.sin(a)*r);
+            coreGroup.add(fl);
         }
         const flMat=track(new THREE.MeshPhongMaterial({color:0xffcc44,emissive:0xcc8800,emissiveIntensity:0.6}));
         const flGeo=track(new THREE.SphereGeometry(0.035,8,8));
-        for(let i=0;i<46;i++){ const a=(i/46)*Math.PI*2;
-            const f=new THREE.Mesh(flGeo,flMat); f.position.set(Math.cos(a)*0.92,0.2,Math.sin(a)*0.92);
-            coreItems.push({mesh:f,phase:i*0.4,baseY:0.2,sway:0.02}); coreGroup.add(f); }
-        addInnerSparkles(600,1.6,0.8,0xffd870);
+        // ring of open golden florets right at the disk rim
+        for(let i=0;i<62;i++){ const a=(i/62)*Math.PI*2;
+            const f=new THREE.Mesh(flGeo,flMat); f.position.set(Math.cos(a)*1.29,0.22,Math.sin(a)*1.29);
+            coreItems.push({mesh:f,phase:i*0.4,baseY:0.22,sway:0.02}); coreGroup.add(f); }
+        addInnerSparkles(600,2.4,0.8,0xffd870);
         addStem({points:[[0,0.02,0],[0.06,-1.2,0.04],[-0.05,-2.4,0],[0.02,-3.6,0]],radius:0.075,
             leaves:[{t:0.45,angle:1.0,len:2.4,width:1.1,tilt:-0.85},{t:0.65,angle:4.1,len:2.1,width:0.95,tilt:-0.95}]});
     }
@@ -1250,9 +1287,9 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
         D.label='✨ '+dreamState.name; D.latin=dreamState.latin; D.desc=dreamState.desc;
         D.glow=dreamState.glow; D.aura=dreamState.aura; D.open=p.openBase;
     }
-    function buildDream(){
-        if(!dreamState.params) regenDream();
-        const p=dreamState.params;
+    // Shared procedural builder. Both the random Dream flower and fixed entries
+    // such as Ember run through this; only the params and glow colour differ.
+    function buildProcedural(p, glow){
         for(let L=0; L<p.layers; L++){
             const f=L/Math.max(1,p.layers-1);
             const hh=p.twoTone ? (L%2 ? p.h2 : p.h1) : p.h1+(p.h2-p.h1)*f*0.4;
@@ -1260,7 +1297,7 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
                 base:hsl(hh+8,p.sat,p.baseL), mid:hsl(hh,p.sat,p.midL),
                 tip:hsl(hh-6,Math.max(30,p.sat-14),p.tipL),
                 midStop:0.45, vein:'rgba(255,255,255,0.09)', mottle:0.05,
-                freckles:(L===p.layers-1)?p.freckles:0, freckleRGB:'120,30,60'
+                freckles:(L===p.layers-1)?p.freckles:0, freckleRGB:p.freckleRGB||'120,30,60'
             }));
             const cnt=Math.max(4,p.baseCount-L);
             addRing({count:cnt, texture:tex,
@@ -1269,18 +1306,18 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
                      ruffle:p.ruffle, tipPinch:p.tipPinch, notch:p.notch,
                      widthPow:0.72, segU:34, segV:22},
                 elevStart:p.elev-L*p.elevStep, azOffset:L*Math.PI/cnt,
-                scale:1, opacity:0.97, emissive:'#331122', emissiveInt:0.22, jitter:0.14});
+                scale:1, opacity:0.97, emissive:p.emissive||'#331122', emissiveInt:0.22, jitter:0.14});
         }
         coreGroup=new THREE.Group(); flowerGroup.add(coreGroup);
         if(p.core==='orb'){
             const orb=new THREE.Mesh(track(new THREE.SphereGeometry(0.34,24,18)),
-                track(new THREE.MeshPhongMaterial({color:0xfff4e0, emissive:dreamState.glow,
+                track(new THREE.MeshPhongMaterial({color:0xfff4e0, emissive:glow,
                     emissiveIntensity:0.85, shininess:120})));
             orb.position.y=0.42; coreGroup.add(orb);
         } else if(p.core==='spiral'){
             const GA=Math.PI*(3-Math.sqrt(5));
             const sg=track(new THREE.SphereGeometry(0.05,8,6));
-            const sm=track(new THREE.MeshPhongMaterial({color:0x2a1020, emissive:dreamState.glow,
+            const sm=track(new THREE.MeshPhongMaterial({color:0x2a1020, emissive:glow,
                 emissiveIntensity:0.35, shininess:60}));
             for(let i=0;i<140;i++){
                 const r=0.06+0.4*Math.sqrt(i/140), a=i*GA;
@@ -1292,7 +1329,7 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
             const fg=track(new THREE.CylinderGeometry(0.012,0.018,0.6,5));
             const fm=track(new THREE.MeshPhongMaterial({color:0xfff0c8, emissive:0x664411, shininess:80}));
             const ag=track(new THREE.SphereGeometry(0.05,8,6));
-            const am=track(new THREE.MeshPhongMaterial({color:0xffe9a8, emissive:dreamState.glow,
+            const am=track(new THREE.MeshPhongMaterial({color:0xffe9a8, emissive:glow,
                 emissiveIntensity:0.6}));
             for(let i=0;i<26;i++){
                 const a=i/26*Math.PI*2, r=0.16+((i%3)*0.05);
@@ -1304,9 +1341,27 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
                 if(i%4===0) coreItems.push({mesh:an, baseY:an.position.y, phase:a*2, sway:0.03});
             }
         }
-        addInnerSparkles(60,1.1,0.8,dreamState.glow);
+        addInnerSparkles(60,1.1,0.8,glow);
         simpleStem(0.6+Math.random()*2, 2.8+Math.random()*2);
     }
+
+    function buildDream(){
+        if(!dreamState.params) regenDream();
+        buildProcedural(dreamState.params, dreamState.glow);
+    }
+
+    // Ember — a fixed cold-blue bloom. Same procedural petals as a Dream
+    // flower, but the palette is pinned so it blooms identically every time.
+    const EMBER_GLOW=0x63b4ff;
+    const EMBER_PARAMS={
+        h1:214, h2:194, sat:76, tipL:90, midL:60, baseL:31,
+        layers:3, baseCount:9, twoTone:true,
+        len:2.8, wid:1.5, curl:0.34, cup:0.44,
+        recurve:0.2, ruffle:0.26, tipPinch:0.34, notch:0,
+        elev:52, elevStep:13, freckles:0, core:'stamens',
+        emissive:'#10243f'
+    };
+    function buildEmber(){ buildProcedural(EMBER_PARAMS, EMBER_GLOW); }
 
     const FLOWERS = {
         peony:     { label:'Peony',           latin:'Paeonia lactiflora',      build:buildPeony,
@@ -1368,9 +1423,14 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
         dream:     { label:'✨ Dream',        latin:'Somnia mirabilis',        build:buildDream,
                      open:1.1, glow:0xffaaff, aura:0xff88cc,
                      desc:'Press ✨ to grow a flower that has never existed before.',
-                     motion:{nx:0.05, nz:0.04, bob:0.05, pulse:0.02} }
+                     motion:{nx:0.05, nz:0.04, bob:0.05, pulse:0.02} },
+        ember:     { label:'Ember',           latin:'Flamma caerulea',         build:buildEmber,
+                     open:0.66, glow:EMBER_GLOW, aura:0x3f7fe8,
+                     desc:'A flame that forgot how to burn warm.',
+                     motion:{nx:0.05, nxs:0.42, nz:0.04, nzs:0.36, bob:0.045, bobs:0.5,
+                             ripple:0.022, rippleS:0.7, shimmer:1.2} }
     };
-    const ORDER=['dream','peony','rose','dahlia','orchid','lotus','sunflower','cherry','morningglory',
+    const ORDER=['dream','ember','peony','rose','dahlia','orchid','lotus','sunflower','cherry','morningglory',
                  'cereus','dicentra','tulip','lily','anemone','ranunculus'];
 
     // ---------------- Ground aura ----------------
