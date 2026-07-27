@@ -1,5 +1,7 @@
 ﻿# 🌙 Enchanted Night Garden
 
+**→ [enchanted-night-garden.pages.dev](https://enchanted-night-garden.pages.dev)**
+
 An interactive 3D night garden that blooms in your browser. Fourteen hand-crafted procedural flowers rest under a starlit sky — tap one open, watch moths drift through in colors that echo the petals, change the weather, and dream up flowers that have never existed.
 
 It also installs. On an iPhone or an Android phone you can add it to your home screen and it opens full-screen, with no browser chrome and no network — the whole garden is cached on the device.
@@ -73,17 +75,24 @@ There is no build step — serve the `public/` folder and you're done.
 - **Locally:** from the repo root, run `python -m http.server 8000 --directory public`, then open <http://localhost:8000>. A plain web server is needed rather than opening the file directly, because service workers refuse to run over `file://`.
 - **On the web:** upload the contents of `public/` to any static host.
 
-### Deploying to Cloudflare
+### Deploying
 
-`wrangler.jsonc` configures a static-assets Worker pointed at `public/`:
+The live site is a Cloudflare **Pages** project connected to this repository:
+every push to `master` rebuilds it automatically. Nothing to run by hand.
 
-```bash
-npx wrangler deploy
-```
+Its settings must be:
 
-If instead you connect the repository through the Cloudflare dashboard as a **Pages** project, leave the build command **empty** and set the output directory to **`public`**.
+| Setting | Value |
+|---|---|
+| Build command | *(empty)* |
+| **Build output directory** | **`public`** |
+| Production branch | `master` |
 
-> ⚠️ Pages and Workers are two different products. If the site is served from a Pages project, a `wrangler deploy` will not update it — and vice versa. Whichever one is live, confirm a change actually landed by loading the site rather than trusting the push.
+> ⚠️ **If the site starts returning 404 for everything, check the output directory first.** With it left empty, Pages publishes the repository root — which has no `index.html` — so every build "succeeds" while serving nothing. That is the one setting that silently breaks the whole site.
+
+There is also a static-assets **Worker** defined by `wrangler.jsonc`, deployed separately with `npx wrangler deploy`. It is a second, independent copy of the site — pushing to GitHub does not update it, and `wrangler deploy` does not update Pages. Prefer the Pages URL above; the `*.workers.dev` domain is blocked by a number of mobile carriers and DNS filters, so it is not reliable to share.
+
+Whichever you use, confirm a change actually landed by loading the site and looking for it, rather than trusting the deploy.
 
 ### After you deploy an update
 
