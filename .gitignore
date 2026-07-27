@@ -1,0 +1,9 @@
+# wrangler's local build/dev cache
+.wrangler/
+
+# node, if a tool is ever added
+node_modules/
+
+# OS cruft
+.DS_Store
+Thumbs.db

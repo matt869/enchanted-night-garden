@@ -1,0 +1,36 @@
+{
+  "name": "Enchanted Night Garden",
+  "short_name": "Night Garden",
+  "description": "An interactive 3D night garden that blooms in your hand — 14 procedural flowers under a starlit sky, colour-shifting moths, changing weather and dream-flowers.",
+  "id": "/",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "display_override": ["standalone", "fullscreen", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#070714",
+  "theme_color": "#070714",
+  "categories": ["entertainment", "graphics", "lifestyle"],
+  "lang": "en",
+  "dir": "ltr",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
