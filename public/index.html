@@ -1115,15 +1115,20 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
         const sepTex=track(makePetalTexture({base:'#274a22',mid:'#3f7038',tip:'#5c9450',mottle:0.05,paleEdge:false}));
         // Ray florets: lance-shaped blades set radially, like rays of light.
         // 21 + 13 = 34 rays, keeping the whole head on the Fibonacci sequence.
-        addRing({count:21,elevStart:74,opacity:0.98,emissive:'#cc7a00',emissiveInt:0.22,shininess:40,
+        // Elevation is the *closed* pose -- blooming rotates it back towards flat
+        // (~0.36x at this open value), so these shallow angles are what lays the
+        // rays out around the rim of the disk instead of standing them up over it.
+        addRing({count:21,elevStart:22,opacity:0.98,emissive:'#cc7a00',emissiveInt:0.22,shininess:40,
             texture:petTex,twist:false,jitter:0.08,flutter:0.7,
             geo:{len:2.75,maxWidth:0.66,curl:0.30,fold:0.42,tipPinch:0.60,widthPow:0.70,segU:36,segV:14}});
-        addRing({count:13,azOffset:Math.PI/21,elevStart:64,opacity:0.97,emissive:'#b96e00',emissiveInt:0.2,shininess:40,
+        addRing({count:13,azOffset:Math.PI/21,elevStart:12,opacity:0.97,emissive:'#b96e00',emissiveInt:0.2,shininess:40,
             texture:petTex2,twist:false,jitter:0.08,flutter:0.7,
             geo:{len:2.45,maxWidth:0.60,curl:0.34,fold:0.42,tipPinch:0.58,widthPow:0.70,segU:36,segV:14}});
-        addRing({count:14,azOffset:0.3,elevStart:80,opacity:0.9,emissive:'#1a3a16',emissiveInt:0.12,shininess:30,
+        // Green bracts sit *behind* the head: below horizontal so they fringe the
+        // underside of the disk rather than spiking up through the rays.
+        addRing({count:14,azOffset:0.3,elevStart:-16,opacity:0.9,emissive:'#1a3a16',emissiveInt:0.12,shininess:30,
             texture:sepTex,twist:false,jitter:0.12,flutter:0.5,scale:0.85,
-            geo:{len:1.7,maxWidth:0.42,curl:0.3,tipPinch:0.5,widthPow:0.9,segU:24,segV:10}});
+            geo:{len:1.7,maxWidth:0.42,curl:0.3,droop:0.35,tipPinch:0.5,widthPow:0.9,segU:24,segV:10}});
         coreGroup=new THREE.Group(); flowerGroup.add(coreGroup);
         // Central disk: a flat, only slightly convex plate rather than a dome.
         const disc=new THREE.Mesh(track(new THREE.SphereGeometry(1.34,48,28)),
@@ -1361,9 +1366,12 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
 
     // Ember — a fixed cold-blue bloom. Same procedural petals as a Dream
     // flower, but the palette is pinned so it blooms identically every time.
+    // Lightness is held well below the Dream generator's range: the bloom pass is
+    // additive, so anything near 90% tip lightness is pushed to white and the blue
+    // is lost. Topping out around 70% leaves the glow room to work on top.
     const EMBER_GLOW=0x63b4ff;
     const EMBER_PARAMS={
-        h1:214, h2:194, sat:76, tipL:90, midL:60, baseL:31,
+        h1:214, h2:194, sat:76, tipL:70, midL:50, baseL:26,
         layers:3, baseCount:9, twoTone:true,
         len:2.8, wid:1.5, curl:0.34, cup:0.44,
         recurve:0.2, ruffle:0.26, tipPinch:0.34, notch:0,
