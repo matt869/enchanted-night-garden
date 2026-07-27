@@ -500,13 +500,19 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
         const len=o.len, maxWidth=o.maxWidth;
         const curl=o.curl||0, ruffle=o.ruffle||0, recurve=o.recurve||0,
               fold=o.fold||0, droop=o.droop||0, cup=o.cup||0,
-              tipPinch=o.tipPinch||0, widthPow=o.widthPow||0.7, notch=o.notch||0;
+              tipPinch=o.tipPinch||0, widthPow=o.widthPow||0.7, notch=o.notch||0,
+              widthBias=o.widthBias||1;
         const segU=o.segU||48, segV=o.segV||32;
         const positions=[], uvs=[], indices=[];
 
         for (let i=0;i<=segU;i++){
             const u=i/segU;
-            let width=maxWidth*Math.pow(Math.sin(Math.PI*u),widthPow);
+            // widthBias moves the widest point off centre. The raw sine is
+            // symmetric (widest at half height, pointed at both ends); a bias
+            // above 1 pushes the shoulder up toward the tip, which narrows the
+            // base and leaves a broad rounded blade -- a spoon, not a leaf.
+            const uw=Math.pow(u,widthBias);
+            let width=maxWidth*Math.pow(Math.sin(Math.PI*uw),widthPow);
             width*=(1 - tipPinch*Math.pow(u,3));
             for (let j=0;j<=segV;j++){
                 const v=j/segV;
@@ -982,18 +988,21 @@ const NIGHT_AUDIO_SRC="data:audio/mpeg;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2Zj
         const texIn=track(makePetalTexture({base:'#f9cc5c',mid:'#ec5a30',tip:'#c22a1c',
             midStop:0.44,flames:{rgb:'120,12,10',count:6,alpha:0.20},mottle:0.05,
             midrib:'rgba(255,224,150,0.4)',paleEdge:false}));
-        // Cup-shaped, the classic tulip form: six smooth tepals in two whorls of
-        // three, standing upright and curving INWARD at the tips so the bloom
-        // closes into a deep cup. Recurve and ruffle are both zero on purpose --
-        // flared tips would read as lily-flowered, wavy edges as parrot.
-        addRing({count:3,elevStart:103,opacity:0.98,emissive:'#c23018',emissiveInt:0.16,shininess:150,
-            texture:tex,twist:false,jitter:0.04,flutter:0.5,
-            geo:{len:3.05,maxWidth:1.12,curl:0.60,cup:0.64,fold:0.22,recurve:0,tipPinch:0.30,
-                 widthPow:0.86,ruffle:0,segU:56,segV:28}});
-        addRing({count:3,azOffset:Math.PI/3,elevStart:99,opacity:0.98,emissive:'#c23018',emissiveInt:0.16,shininess:150,
-            texture:texIn,twist:false,jitter:0.04,flutter:0.5,
-            geo:{len:2.86,maxWidth:1.20,curl:0.66,cup:0.70,fold:0.24,recurve:0,tipPinch:0.28,
-                 widthPow:0.88,ruffle:0,segU:56,segV:28}});
+        // Standard/classic form. Six segments -- three true petals inside, three
+        // petal-like sepals outside -- each smooth, concave and spoon-shaped:
+        // widthBias narrows the base where it joins the stem and carries a broad
+        // oval blade up to a gently rounded tip, while a strong cup hollows the
+        // face. They stand just past vertical so the six curve up into one
+        // symmetrical bell. Zero ruffle and zero recurve are deliberate: waviness
+        // would read as parrot, flared points as lily-flowered.
+        addRing({count:3,elevStart:101,opacity:0.98,emissive:'#c23018',emissiveInt:0.16,shininess:150,
+            texture:tex,twist:false,jitter:0.03,flutter:0.5,
+            geo:{len:3.05,maxWidth:1.18,curl:0.58,cup:0.78,fold:0.14,recurve:0,tipPinch:0.06,
+                 widthPow:0.60,widthBias:1.42,ruffle:0,segU:56,segV:28}});
+        addRing({count:3,azOffset:Math.PI/3,elevStart:97,opacity:0.98,emissive:'#c23018',emissiveInt:0.16,shininess:150,
+            texture:texIn,twist:false,jitter:0.03,flutter:0.5,
+            geo:{len:2.88,maxWidth:1.24,curl:0.63,cup:0.84,fold:0.15,recurve:0,tipPinch:0.05,
+                 widthPow:0.58,widthBias:1.46,ruffle:0,segU:56,segV:28}});
         coreGroup=new THREE.Group(); flowerGroup.add(coreGroup);
         // pale-green three-lobed pistil
         const pist=new THREE.Mesh(track(new THREE.CylinderGeometry(0.055,0.10,0.62,3)),
