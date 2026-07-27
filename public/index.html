@@ -236,15 +236,17 @@
 <script src="vendor/three.min.js"></script>
 <script>
 /* ---------------------------------------------------------------------
-   SOUNDTRACK -- drop your file(s) into  public/audio/  and list them here.
-   The browser plays the first entry it can decode, so you can ship an
-   .mp3 plus optional .m4a / .ogg fallbacks under the same base name.
-   Ship nothing at all and the garden just stays silent; every other
+   SOUNDTRACK -- the files live in  public/audio/  and are listed here.
+   The browser plays the first entry it can decode. The .m4a is the
+   original AAC audio untouched, so it goes first; the .mp3 is a
+   transcode kept as the universal fallback for anything that cannot
+   decode AAC. Swap the files, keep the names, and nothing else changes.
+   Remove them entirely and the garden just stays silent -- every other
    feature keeps working.
    --------------------------------------------------------------------- */
 const NIGHT_AUDIO_SOURCES = [
-    { src: "audio/night-garden.mp3", type: "audio/mpeg" },
     { src: "audio/night-garden.m4a", type: "audio/mp4"  },
+    { src: "audio/night-garden.mp3", type: "audio/mpeg" },
     { src: "audio/night-garden.ogg", type: "audio/ogg"  }
 ];
 const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
