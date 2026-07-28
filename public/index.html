@@ -592,6 +592,39 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
             }
         }
 
+        // A hard four-point star burned into the blade itself. This is the single
+        // strongest cue that a petal is glass or polished stone rather than
+        // tissue — a soft highlight reads as wet, a spiked one reads as faceted.
+        // Painted into the texture rather than hung in front as a sprite, so it
+        // travels with the petal and bends with its curl.
+        if (cfg.glint) {
+            const gx = cw * (cfg.glint.x !== undefined ? cfg.glint.x : 0.5);
+            const gy = ch * (1 - (cfg.glint.y !== undefined ? cfg.glint.y : 0.6));
+            const R = cfg.glint.r || 30, A = cfg.glint.a !== undefined ? cfg.glint.a : 0.9;
+            const prev = ctx.globalCompositeOperation;
+            ctx.globalCompositeOperation = 'lighter';
+            const spike = function(dx, dy, len, wid){
+                const lg = ctx.createLinearGradient(gx, gy, gx + dx*len, gy + dy*len);
+                lg.addColorStop(0, 'rgba(255,255,255,' + A + ')');
+                lg.addColorStop(1, 'rgba(255,255,255,0)');
+                ctx.fillStyle = lg;
+                ctx.beginPath();
+                ctx.moveTo(gx - dy*wid, gy + dx*wid);
+                ctx.lineTo(gx + dx*len, gy + dy*len);
+                ctx.lineTo(gx + dy*wid, gy - dx*wid);
+                ctx.closePath(); ctx.fill();
+            };
+            spike(0,-1,R*2.0,R*0.10); spike(0,1,R*2.0,R*0.10);     // long axis
+            spike(-1,0,R*0.95,R*0.09); spike(1,0,R*0.95,R*0.09);   // short axis
+            const core = ctx.createRadialGradient(gx,gy,0,gx,gy,R*0.44);
+            core.addColorStop(0, 'rgba(255,255,255,' + Math.min(1,A+0.08) + ')');
+            core.addColorStop(0.45, 'rgba(255,255,255,0.30)');
+            core.addColorStop(1, 'rgba(255,255,255,0)');
+            ctx.fillStyle = core;
+            ctx.beginPath(); ctx.arc(gx,gy,R*0.44,0,Math.PI*2); ctx.fill();
+            ctx.globalCompositeOperation = prev;
+        }
+
         const tex = new THREE.CanvasTexture(c);
         tex.anisotropy = 4;
         tex.encoding = THREE.sRGBEncoding;
@@ -1748,46 +1781,74 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
                     {t:0.66,angle:3.8,len:1.5,width:0.44,tilt:-1.1}]});
     }
 
-    // Theophane — the same deep-well idea taken cold. Pearl and violet instead of
-    // gold, the well ending in a pale eye rather than a flame, with shards
-    // standing off the rim like something is arriving through it.
-    function buildTheophane(){
-        const outerT=track(makePetalTexture({base:'#221741', mid:'#7466cc', tip:'#eee9ff',
-            midStop:0.46, midrib:'rgba(238,232,255,0.34)',
-            vein:'rgba(226,218,255,0.16)', mottle:0.04, paleEdge:false}));
-        const innerT=track(makePetalTexture({base:'#180f30', mid:'#9689e2', tip:'#f8f5ff',
-            midStop:0.52, midrib:'rgba(246,242,255,0.40)', mottle:0.03, paleEdge:false}));
-        const rings=[[14,10,3.55,0.70,outerT],[13,48,2.95,0.60,outerT],
-                     [12,86,2.20,0.48,innerT],[11,110,1.42,0.36,innerT],[10,128,0.98,0.28,innerT]];
-        rings.forEach(function(r,i){
-            addRing({count:r[0],azOffset:i*0.33,elevStart:r[1],opacity:0.96,
-                emissive:'#4a3f8c',emissiveInt:0.20+i*0.05,shininess:135,texture:r[4],
-                twist:false,jitter:0.12,flutter:0.85,
-                geo:{len:r[2],maxWidth:r[3],curl:0.26,cup:0.34,recurve:i===0?0.30:0.06,
-                     fold:0.26,ruffle:i<2?0.14:0,tipPinch:0.62,widthPow:0.72,segU:34,segV:17}});
-        });
+    // Rimeglass — six blades of frozen glass and nothing else. Monochrome by
+    // rule: graphite through silver to white, not one degree of hue anywhere,
+    // because a single warm tint is enough to make it read as a grey petal
+    // instead of a mineral. Three things carry it:
+    //
+    // Few, broad blades. Where the other flowers stack dozens of petals, this
+    // has six large ones and two small, so each blade is big enough to hold a
+    // glint and to show the dark rim against the pale interior.
+    //
+    // A hard four-point star on every blade, painted into the texture so it
+    // curls with the surface. Soft highlights read as wet; spiked ones read as
+    // faceted, and that difference is the entire material.
+    //
+    // Lopsided on purpose. The rings sweep their elevation right around, so the
+    // blades fan up on one side and hang on the other, and a pair of dark
+    // filaments trail out past them — the asymmetry is what stops it settling
+    // into a daisy.
+    function buildRimeglass(){
+        const blade=track(makePetalTexture({base:'#0d0f12', mid:'#6f767e', tip:'#dde4eb',
+            midStop:0.44, midrib:'rgba(255,255,255,0.44)', vein:'rgba(226,232,238,0.10)',
+            mottle:0.05, paleEdge:false, glint:{x:0.5,y:0.58,r:31,a:0.95}}));
+        const blade2=track(makePetalTexture({base:'#090b0e', mid:'#5d646c', tip:'#cdd5de',
+            midStop:0.48, midrib:'rgba(255,255,255,0.36)', vein:'rgba(214,222,231,0.09)',
+            mottle:0.05, paleEdge:false, glint:{x:0.44,y:0.50,r:26,a:0.85}}));
+        const GLASS={color:0xacb4bd, specular:0xffffff, twist:false, opacity:0.97,
+                     emissive:'#28303a'};
+        addRing(Object.assign({},GLASS,{count:5,elevStart:20,elevEnd:78,
+            emissiveInt:0.30,shininess:210,texture:blade,jitter:0.20,flutter:0.5,
+            geo:{len:3.35,maxWidth:1.24,curl:0.26,cup:0.30,fold:0.34,recurve:0.16,
+                 tipPinch:0.60,widthPow:0.94,segU:38,segV:19}}));
+        addRing(Object.assign({},GLASS,{count:4,azOffset:0.72,elevStart:52,elevEnd:104,
+            emissiveInt:0.26,shininess:210,texture:blade2,jitter:0.18,flutter:0.6,
+            geo:{len:2.35,maxWidth:0.94,curl:0.30,cup:0.34,fold:0.36,recurve:0.10,
+                 tipPinch:0.62,widthPow:0.92,segU:34,segV:17}}));
         coreGroup=new THREE.Group(); flowerGroup.add(coreGroup);
-        addThroat({rim:0.68,floor:0.07,depth:1.46,y:0.50,
-            stops:[[0,'#0d0820'],[0.32,'#3b2f74'],[0.70,'#9d92e4'],[1,'#f4f1ff']],
-            emissive:'#5b4ea8',emissiveInt:0.34,
-            lightC:0xf6f2ff,lightE:0xbfa8ff,lightI:1.0,lightR:0.12});
-        const iris=new THREE.Mesh(track(new THREE.TorusGeometry(0.25,0.034,10,48)),
-            track(new THREE.MeshPhongMaterial({color:0xece7ff,emissive:0x8f7ce8,
-                emissiveIntensity:0.75,shininess:160})));
-        iris.rotation.x=Math.PI/2; iris.position.y=0.04; coreGroup.add(iris);
-        const shardGeo=track(new THREE.ConeGeometry(0.035,0.95,4));
-        const shardMat=track(new THREE.MeshPhongMaterial({color:0xe6e0ff,emissive:0x7d6ad4,
-            emissiveIntensity:0.6,shininess:150,transparent:true,opacity:0.85}));
-        addInstanced(shardGeo,shardMat,16,function(d,i){
-            const a=(i/16)*Math.PI*2, lean=0.30+0.18*Math.cos(a);
-            d.position.set(Math.cos(a)*0.80,1.18+0.30*Math.cos(a),Math.sin(a)*0.80);
-            d.rotation.set(Math.sin(a)*lean,-a,-Math.cos(a)*lean);
-            d.scale.setScalar(0.72+0.42*(0.5+0.5*Math.cos(a)));
+        // a small dark seed at the heart — the one place the flower is solid
+        const pod=new THREE.Mesh(track(new THREE.SphereGeometry(0.20,20,16)),
+            track(new THREE.MeshPhongMaterial({color:0x0d0f13,emissive:0x1b2029,
+                emissiveIntensity:0.5,shininess:180,specular:0xffffff})));
+        pod.position.y=0.24; pod.scale.set(1,0.78,1.18); coreGroup.add(pod);
+        // dark filaments trailing out past the blades, each ending in a bud
+        const filMat=track(new THREE.MeshPhongMaterial({color:0x0b0d10,emissive:0x141a22,
+            emissiveIntensity:0.35,shininess:140,specular:0xdfe6ee}));
+        const budGeo=track(new THREE.SphereGeometry(0.055,10,8));
+        [[2.35,0.62,0.55],[1.95,-0.34,1.35],[1.55,0.18,2.45]].forEach(function(t){
+            const reach=t[0], lift=t[1], dir=t[2];
+            const pts=[new THREE.Vector3(0,0.22,0),
+                       new THREE.Vector3(Math.cos(dir)*reach*0.35,0.34+lift*0.35,Math.sin(dir)*reach*0.35),
+                       new THREE.Vector3(Math.cos(dir)*reach*0.72,0.30+lift*0.80,Math.sin(dir)*reach*0.72),
+                       new THREE.Vector3(Math.cos(dir)*reach,0.20+lift,Math.sin(dir)*reach)];
+            const curve=new THREE.CatmullRomCurve3(pts);
+            coreGroup.add(new THREE.Mesh(
+                track(new THREE.TubeGeometry(curve,26,0.019,6,false)),filMat));
+            const bud=new THREE.Mesh(budGeo,filMat);
+            bud.position.copy(pts[3]); bud.scale.set(1,0.7,1.5);
+            coreItems.push({mesh:bud,phase:dir*1.7,baseY:bud.position.y,sway:0.03});
+            coreGroup.add(bud);
         });
-        addInnerSparkles(560,1.5,1.8,0xcdbdff);
-        addStem({points:[[0,0.02,0],[0.04,-1.2,0.04],[-0.06,-2.4,-0.02],[0.02,-3.6,0]],radius:0.055,
-            leaves:[{t:0.46,angle:1.1,len:1.7,width:0.46,tilt:-1.05},
-                    {t:0.68,angle:4.0,len:1.4,width:0.40,tilt:-1.1}]});
+        addInnerSparkles(460,1.9,1.2,0xdfe8f2);
+        // pale ash-grey stem: no green anywhere on this one either
+        const ashMat=track(new THREE.MeshPhongMaterial({color:0x1a1f25,emissive:0x0b0f14,
+            shininess:70,specular:0xc8d2dc}));
+        const ashLeaf=track(new THREE.MeshPhongMaterial({color:0x222a31,emissive:0x0d1218,
+            shininess:80,specular:0xc8d2dc,side:THREE.DoubleSide}));
+        addStem({points:[[0,0.02,0],[0.06,-1.2,0.04],[-0.06,-2.4,-0.03],[0.02,-3.6,0]],
+            radius:0.052,mat:ashMat,leafMat:ashLeaf,
+            leaves:[{t:0.45,angle:1.0,len:1.7,width:0.46,tilt:-1.0},
+                    {t:0.68,angle:3.95,len:1.4,width:0.40,tilt:-1.1}]});
     }
 
     const FLOWERS = {
@@ -1796,11 +1857,11 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
                      desc:'Nine tiers of gold, folded around a light that was given, not lit.',
                      motion:{shimmer:1.5, pulse:0.024, pulses:0.5, ripple:0.016, rippleS:0.6,
                              byRing:true, bob:0.035, bobs:0.42, nx:0.025, nxs:0.32} },
-        theophane: { label:'Theophane',       latin:'Lux theophana',           build:buildTheophane,
-                     open:0.34, glow:0xc9b6ff, aura:0xa88fff, glowBoost:1.25,
-                     desc:'Something is arriving. The flower is only the door.',
-                     motion:{shimmer:1.7, pulse:0.03, pulses:0.42, ripple:0.02, rippleS:0.55,
-                             byRing:true, nx:0.03, nxs:0.3, nz:0.025, nzs:0.26} },
+        rimeglass: { label:'Rimeglass',       latin:'Vitrum pruinae',          build:buildRimeglass,
+                     open:0.46, glow:0xdfe8f2, aura:0xaebccc, glowBoost:1.0,
+                     desc:'Six blades of frozen glass, with the light still caught inside them.',
+                     motion:{shimmer:1.8, ripple:0.018, rippleS:0.7, byRing:true,
+                             nx:0.045, nxs:0.36, nz:0.035, nzs:0.3, bob:0.03, bobs:0.44} },
         peony:     { label:'Peony',           latin:'Paeonia lactiflora',      build:buildPeony,
                      open:0.66, glow:0xffbb88, aura:0xdfa8ff,
                      desc:'A thousand silk skirts unfurling in the dark.',
@@ -1872,7 +1933,7 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
                      motion:{nx:0.05, nxs:0.42, nz:0.04, nzs:0.36, bob:0.045, bobs:0.5,
                              ripple:0.022, rippleS:0.7, shimmer:1.2} }
     };
-    const ORDER=['dream','seraphel','theophane','cindervane','ember','peony','rose','dahlia','orchid',
+    const ORDER=['dream','seraphel','rimeglass','cindervane','ember','peony','rose','dahlia','orchid',
                  'lotus','sunflower','cherry','morningglory','cereus','dicentra','tulip','lily',
                  'anemone','ranunculus'];
 
