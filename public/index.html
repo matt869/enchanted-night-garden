@@ -592,6 +592,36 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
             }
         }
 
+        // A single hot line piped down the spine of the petal: brightest where it
+        // leaves the centre, narrowing and fading toward the tip. Drawn as thin
+        // horizontal slices because the taper has to run along the petal's
+        // length, which one linear gradient across the texture cannot do. Against
+        // a near-black body this becomes the entire read — the flower turns into
+        // an outline of light rather than a lit surface.
+        if (cfg.spine) {
+            const rgb = cfg.spine.rgb || '255,255,255';
+            const W = cfg.spine.w || 7, A = cfg.spine.a !== undefined ? cfg.spine.a : 0.95;
+            const reach = cfg.spine.reach || 1;
+            const prev = ctx.globalCompositeOperation;
+            ctx.globalCompositeOperation = 'lighter';
+            const N = 72, slice = ch / N;
+            for (let i = 0; i < N; i++) {
+                const t = i / (N - 1);                       // 0 at base, 1 at tip
+                if (t > reach) break;
+                const wid = W * (1 - 0.80 * t) + 0.5;
+                const al = A * Math.pow(1 - t / reach, 1.6);
+                const lg = ctx.createLinearGradient(cw*0.5 - wid*3, 0, cw*0.5 + wid*3, 0);
+                lg.addColorStop(0.00, 'rgba(' + rgb + ',0)');
+                lg.addColorStop(0.34, 'rgba(' + rgb + ',' + (al*0.22).toFixed(3) + ')');
+                lg.addColorStop(0.50, 'rgba(' + rgb + ',' + al.toFixed(3) + ')');
+                lg.addColorStop(0.66, 'rgba(' + rgb + ',' + (al*0.22).toFixed(3) + ')');
+                lg.addColorStop(1.00, 'rgba(' + rgb + ',0)');
+                ctx.fillStyle = lg;
+                ctx.fillRect(cw*0.5 - wid*3, ch - (i+1)*slice, wid*6, slice + 1);
+            }
+            ctx.globalCompositeOperation = prev;
+        }
+
         // A hard four-point star burned into the blade itself. This is the single
         // strongest cue that a petal is glass or polished stone rather than
         // tissue — a soft highlight reads as wet, a spiked one reads as faceted.
@@ -1604,44 +1634,65 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         // cold metal and stays almost black — the scene's warm lights would
         // otherwise lift charcoal straight to tan. The emissive map is black
         // except along the seams, so only the cracks put out light.
+        // The body is nearly black and stays that way — almost all of the light
+        // comes from one hot line down each petal's spine, so the flower reads
+        // as an outline rather than a lit surface. The diffuse map is dark
+        // enough that the scene's warm lights cannot lift it back to tan; the
+        // emissive map is black except for the spine and a whisper of seam.
         const outerTex=track(makePetalTexture({
-            base:'#4a3a33', mid:'#241c1a', tip:'#141013', midStop:0.30,
-            vein:'rgba(90,70,62,0.5)', mottle:0.05, paleEdge:false}));
+            base:'#231d18', mid:'#121011', tip:'#08070a', midStop:0.30,
+            vein:'rgba(70,56,48,0.35)', mottle:0.04, paleEdge:false}));
         const outerHeat=track(makePetalTexture({
-            base:'#c94a08', mid:'#2a0901', tip:'#000000', midStop:0.20,
-            vein:'rgba(255,148,44,0.85)', midrib:'rgba(255,190,90,0.55)',
-            flames:{rgb:'255,140,40',count:6,alpha:0.5}, mottle:0, paleEdge:false}));
+            base:'#160600', mid:'#070200', tip:'#000000', midStop:0.30,
+            vein:'rgba(255,132,36,0.20)', mottle:0, paleEdge:false,
+            spine:{rgb:'255,196,120', w:6.5, a:1.0, reach:0.88}}));
         const innerTex=track(makePetalTexture({
-            base:'#5c463c', mid:'#2c211d', tip:'#1a1412', midStop:0.34,
-            vein:'rgba(105,80,68,0.5)', mottle:0.05, paleEdge:false}));
+            base:'#2b231c', mid:'#161213', tip:'#0a090c', midStop:0.34,
+            vein:'rgba(84,66,56,0.35)', mottle:0.04, paleEdge:false}));
         const innerHeat=track(makePetalTexture({
-            base:'#e07518', mid:'#3f1002', tip:'#030101', midStop:0.26,
-            vein:'rgba(255,170,60,0.9)', midrib:'rgba(255,214,132,0.6)',
-            flames:{rgb:'255,160,55',count:5,alpha:0.45}, mottle:0, paleEdge:false}));
+            base:'#1e0900', mid:'#0a0300', tip:'#000000', midStop:0.30,
+            vein:'rgba(255,152,50,0.22)', mottle:0, paleEdge:false,
+            spine:{rgb:'255,214,150', w:5.5, a:1.0, reach:0.84}}));
         // elevStart -> elevEnd sweeps around the ring, which is what fans the
         // bloom to one side; shininess is pushed high so the seams catch a
         // hard metal specular rather than a soft petal sheen
         // color pulls the diffuse down hard: this scene throws a lot of warm light
         // and cold metal has to survive it. specular is steel-white, not the warm
         // petal specular the other flowers use.
-        const METAL={color:0x585048, specular:0x6e655c, twist:false,
+        const METAL={color:0x2e2a26, specular:0x5a534b, twist:false,
                      emissive:'#ffffff', opacity:0.99};
-        addRing(Object.assign({},METAL,{count:7,elevStart:30,elevEnd:58,
-            emissiveInt:0.62,shininess:150,texture:outerTex,emissiveMap:outerHeat,
-            jitter:0.16,flutter:0.55,
-            geo:{len:3.45,maxWidth:0.86,curl:0.30,fold:0.52,recurve:0.44,ruffle:0.30,
-                 tipPinch:0.56,widthPow:0.76,segU:40,segV:20}}));
-        addRing(Object.assign({},METAL,{count:8,azOffset:Math.PI/8,elevStart:50,elevEnd:76,
-            emissiveInt:0.68,shininess:150,texture:outerTex,emissiveMap:outerHeat,
-            jitter:0.14,flutter:0.6,
-            geo:{len:2.72,maxWidth:0.72,curl:0.34,fold:0.48,recurve:0.32,ruffle:0.26,
-                 tipPinch:0.54,widthPow:0.78,segU:36,segV:18}}));
-        addRing(Object.assign({},METAL,{count:7,azOffset:0.42,elevStart:70,elevEnd:92,
-            emissiveInt:0.72,shininess:160,texture:innerTex,emissiveMap:innerHeat,
-            jitter:0.12,flutter:0.7,
-            geo:{len:1.92,maxWidth:0.56,curl:0.40,fold:0.42,recurve:0.18,ruffle:0.20,
-                 tipPinch:0.50,widthPow:0.80,segU:32,segV:16}}));
-
+        // Flat and open, in the same broad-blade language as Rimeglass — few
+        // large plates laid nearly level rather than many narrow ones splayed
+        // into a star. Broad blades are what let the seams read: a narrow spike
+        // shows one line, a wide plate shows the whole cracked pattern across it.
+        //
+        // `cup` stays low so each plate lies like beaten sheet rather than
+        // curling into a wall, and the elevations sweep around the ring so the
+        // bloom fans up on one side and settles on the other.
+        const collar=track(makePetalTexture({base:'#3a2c26', mid:'#1e1715', tip:'#100c0b',
+            midStop:0.34, vein:'rgba(80,62,54,0.45)', mottle:0.05, paleEdge:false}));
+        addRing(Object.assign({},METAL,{count:5,elevStart:10,elevEnd:44,
+            emissiveInt:1.15,shininess:150,texture:outerTex,emissiveMap:outerHeat,
+            jitter:0.20,flutter:0.5,
+            geo:{len:3.50,maxWidth:1.34,curl:0.20,cup:0.20,fold:0.22,recurve:0.14,
+                 ruffle:0.16,tipPinch:0.44,widthPow:0.96,segU:40,segV:21}}));
+        addRing(Object.assign({},METAL,{count:4,azOffset:0.68,elevStart:30,elevEnd:70,
+            emissiveInt:1.20,shininess:150,texture:outerTex,emissiveMap:outerHeat,
+            jitter:0.18,flutter:0.6,
+            geo:{len:2.70,maxWidth:1.12,curl:0.24,cup:0.24,fold:0.22,recurve:0.10,
+                 ruffle:0.14,tipPinch:0.46,widthPow:0.95,segU:36,segV:19}}));
+        addRing(Object.assign({},METAL,{count:3,azOffset:2.1,elevStart:52,elevEnd:88,
+            emissiveInt:1.30,shininess:160,texture:innerTex,emissiveMap:innerHeat,
+            jitter:0.16,flutter:0.7,
+            geo:{len:1.90,maxWidth:0.86,curl:0.28,cup:0.28,fold:0.20,recurve:0.06,
+                 ruffle:0.12,tipPinch:0.48,widthPow:0.94,segU:32,segV:17}}));
+        // a couple of short dark plates tucked under the fan, hiding where the
+        // blades meet the stem
+        addRing(Object.assign({},METAL,{count:4,azOffset:0.3,elevStart:-14,
+            emissiveInt:0.30,shininess:120,texture:collar,emissiveMap:outerHeat,
+            jitter:0.16,flutter:0.4,scale:0.92,
+            geo:{len:1.70,maxWidth:0.58,curl:0.18,fold:0.38,droop:0.30,
+                 tipPinch:0.55,widthPow:0.80,segU:28,segV:14}}));
         coreGroup=new THREE.Group(); flowerGroup.add(coreGroup);
         // the one white-hot point — the additive bloom pass turns this into the
         // glare that sells the whole thing, so it is deliberately near-white
@@ -1651,7 +1702,7 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         const heart=new THREE.Mesh(track(new THREE.SphereGeometry(0.19,24,18)),
             track(new THREE.MeshPhongMaterial({color:0xffcf94,emissive:0xff6a10,
                 emissiveIntensity:0.5,shininess:170})));
-        heart.position.y=0.30; heart.scale.y=0.88; coreGroup.add(heart);
+        heart.position.y=0.20; heart.scale.y=0.80; coreGroup.add(heart);
 
         // a bed of cooling coals packed round the heart, hottest at the centre
         const GA=Math.PI*(3-Math.sqrt(5));
@@ -1662,8 +1713,8 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
             emissiveIntensity:0.30,shininess:45}));
         function coalPlacer(off){
             return function(d,i){
-                const idx=i*2+off, r=0.62*Math.sqrt((idx+0.5)/120), a=idx*GA;
-                d.position.set(Math.cos(a)*r, 0.20-0.10*(r/0.62)*(r/0.62), Math.sin(a)*r);
+                const idx=i*2+off, r=0.54*Math.sqrt((idx+0.5)/120), a=idx*GA;
+                d.position.set(Math.cos(a)*r, 0.13-0.08*(r/0.54)*(r/0.54), Math.sin(a)*r);
                 d.rotation.y=-a;
                 d.scale.set(0.9,0.62,1.25);
             };
@@ -1677,9 +1728,9 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
             emissiveIntensity:0.7}));
         const sparks=[];
         for(let i=0;i<34;i++){
-            const a=Math.random()*Math.PI*2, rr=0.30+Math.random()*0.52;
+            const a=Math.random()*Math.PI*2, rr=0.16+Math.random()*0.42;
             sparks.push({x:Math.cos(a)*rr, z:Math.sin(a)*rr,
-                         y:0.46+Math.random()*0.62, phase:Math.random()*Math.PI*2});
+                         y:0.42+Math.random()*0.80, phase:Math.random()*Math.PI*2});
         }
         const sparkInst=addInstanced(sparkGeo,sparkMat,34,function(d,i){
             const s=sparks[i]; d.position.set(s.x,s.y,s.z);
@@ -1687,7 +1738,7 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         for(let i=0;i<34;i++){ const s=sparks[i];
             instItems.push({inst:sparkInst,index:i,x:s.x,z:s.z,baseY:s.y,phase:s.phase,sway:0.05}); }
 
-        addInnerSparkles(420,1.7,1.3,0xffa040);
+        addInnerSparkles(420,1.9,1.1,0xffa040);
         // charred stem and leaves: this bloom has no green anywhere in it
         const charMat=track(new THREE.MeshPhongMaterial({color:0x070505,emissive:0x0a0301,
             shininess:22}));
@@ -1858,7 +1909,7 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
                      motion:{shimmer:1.5, pulse:0.024, pulses:0.5, ripple:0.016, rippleS:0.6,
                              byRing:true, bob:0.035, bobs:0.42, nx:0.025, nxs:0.32} },
         rimeglass: { label:'Rimeglass',       latin:'Vitrum pruinae',          build:buildRimeglass,
-                     open:0.46, glow:0xdfe8f2, aura:0xaebccc, glowBoost:1.0,
+                     open:0.46, glow:0xdfe8f2, aura:0xaebccc, glowBoost:1.0, ringTint:0x9fb4c8,
                      desc:'Six blades of frozen glass, with the light still caught inside them.',
                      motion:{shimmer:1.8, ripple:0.018, rippleS:0.7, byRing:true,
                              nx:0.045, nxs:0.36, nz:0.035, nzs:0.3, bob:0.03, bobs:0.44} },
@@ -1923,7 +1974,7 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
                      desc:'Press ✨ to grow a flower that has never existed before.',
                      motion:{nx:0.05, nz:0.04, bob:0.05, pulse:0.02} },
         cindervane:{ label:'Cindervane',      latin:'Ferrocalyx ardens',       build:buildCindervane,
-                     open:0.5,  glow:0xff7a2a, aura:0xff4d1a, glowBoost:0.95,
+                     open:0.42, glow:0xff7a2a, aura:0xff4d1a, glowBoost:0.95, ringTint:0xff7038,
                      desc:'It cooled into metal, and went on burning anyway.',
                      motion:{shimmer:1.9, ripple:0.022, rippleS:1.5, byRing:true,
                              pulse:0.022, pulses:0.9, nx:0.04, nxs:0.4, nz:0.03, nzs:0.34} },
@@ -2794,6 +2845,11 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         haloMat.color.set(F.glow);
         // heart glint: gold star, ring pulled toward violet but tinted by the flower
         glintMat.color.set(F.glow).lerp(new THREE.Color(0xffd0a0), 0.65);
+        // The violet ring behind the glint is the house style and suits most of
+        // the garden, but a flower built on a strict two-colour palette reads as
+        // a mistake with a third hue sitting in its middle. ringTint lets those
+        // few opt the ring into their own colour instead of dropping it.
+        ringMat.color.set(F.ringTint!==undefined ? F.ringTint : 0xb478ff);
         ringMat.color.set(F.aura).lerp(new THREE.Color(0xb060ff), 0.5);
         tintMoths(F.glow);
         fnameEl.innerHTML=F.label+'<span class="latin">'+F.latin+'</span>';
