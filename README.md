@@ -2,7 +2,7 @@
 
 **→ [enchanted-night-garden.pages.dev](https://enchanted-night-garden.pages.dev)**
 
-An interactive 3D night garden that blooms in your browser. Fourteen hand-crafted procedural flowers rest under a starlit sky — tap one open, watch moths drift through in colors that echo the petals, change the weather, and dream up flowers that have never existed.
+An interactive 3D night garden that blooms in your browser. Eighteen hand-crafted procedural flowers rest under a starlit sky — tap one open, watch moths drift through in colors that echo the petals, change the weather, and dream up flowers that have never existed.
 
 It also installs. On an iPhone or an Android phone you can add it to your home screen and it opens full-screen, with no browser chrome and no network — the whole garden is cached on the device.
 
@@ -12,7 +12,7 @@ It also installs. On an iPhone or an Android phone you can add it to your home s
 
 ## ✨ Features
 
-- **14 procedural flowers** — Peony, Rose, Dahlia, Orchid, Lotus, Sunflower, Cherry Blossom, Morning Glory, Night Cereus, Bleeding Heart, Tulip, Lily, Anemone, and Ranunculus. Each is generated from scratch in code — petal shape, curl, texture, and glow are all procedural, so no two frames look quite the same.
+- **18 procedural flowers** — Peony, Rose, Dahlia, Orchid, Lotus, Sunflower, Cherry Blossom, Morning Glory, Night Cereus, Bleeding Heart, Tulip, Lily, Anemone, and Ranunculus, alongside four invented ones: **Ember**, a cold-blue bloom; **Cindervane**, blackened metal petals with the forge seams still glowing in them; and **Seraphel** and **Theophane**, a matched pair built around a throat you can see down into, one gold and granted, one pearl and arriving. Each is generated from scratch in code — petal shape, curl, texture, and glow are all procedural, so no two frames look quite the same.
 - **✨ Dream flowers** — a generator that invents a brand-new flower every time you tap it: its own palette, petal count, luminous heart, made-up name, and faux-Latin species. Endlessly different.
 - **Tap to bloom** — click or tap a flower to gently open or furl its petals closed, with a soft burst of stardust when it reopens.
 - **Living moths** — luna-style moths drift through the garden on time-warped wingbeats, and their wings shift color to harmonize with whatever flower is on screen.

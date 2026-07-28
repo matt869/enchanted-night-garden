@@ -702,10 +702,14 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         const geo = track(createPetalGeometry(cfg.geo));
         const thisRingPhase = ringCounter++;
         const mat=track(new THREE.MeshPhongMaterial({
-            map:cfg.texture, color:0xffffff,
+            map:cfg.texture, color:cfg.color!==undefined?cfg.color:0xffffff,
+            // an emissiveMap lets a petal glow only where the texture is bright,
+            // instead of the whole surface lifting by one flat colour
+            emissiveMap:cfg.emissiveMap||null,
             emissive:new THREE.Color(cfg.emissive),
             emissiveIntensity:cfg.emissiveInt!==undefined?cfg.emissiveInt:0.2,
-            shininess:cfg.shininess!==undefined?cfg.shininess:110, specular:0xffe6cc,
+            shininess:cfg.shininess!==undefined?cfg.shininess:110,
+            specular:cfg.specular!==undefined?cfg.specular:0xffe6cc,
             transparent:true, opacity:cfg.opacity, side:THREE.DoubleSide
         }));
         const inst=track(new THREE.InstancedMesh(geo,mat,cfg.count));
@@ -752,7 +756,7 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         (cfg.leaves||[]).forEach(function(L){
             const lg = track(createPetalGeometry({len:L.len||1.5, maxWidth:L.width||0.45,
                 curl:0.25, fold:0.4, tipPinch:0.5, widthPow:0.8, segU:24, segV:14}));
-            const leaf = new THREE.Mesh(lg, leafMat);
+            const leaf = new THREE.Mesh(lg, cfg.leafMat||leafMat);
             const p = curve.getPoint(L.t);
             leaf.position.copy(p);
             leaf.rotation.y = L.angle||0;
@@ -1545,7 +1549,258 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
     };
     function buildEmber(){ buildProcedural(EMBER_PARAMS, EMBER_GLOW); }
 
+    // Cindervane — blackened metal petals with the forge seams still glowing in
+    // them. Three ideas carry the whole look:
+    //
+    // The heat *leaves* the flower. Each petal runs molten at the base and cools
+    // to charcoal at the tip, so the bloom reads as something cooling from a
+    // white-hot heart outward rather than something painted orange. The vein
+    // curves the texture painter already draws become the seams, which is why
+    // they run base-to-tip: that is the direction metal cracks as it cools.
+    //
+    // It is forged, not grown. Every other flower here is radially symmetric.
+    // These rings sweep their elevation from one side of the ring to the other,
+    // so the bloom fans open asymmetrically, and the petals recurve and ruffle
+    // like sheet metal that warped in the heat instead of cupping like tissue.
+    //
+    // Only two hues and one accent: near-black body, ember orange in the seams,
+    // one white-hot point at the centre. No greens, no pinks — the charred stem
+    // is why it needs its own leaf material.
+    function buildCindervane(){
+        // Two textures per petal doing two different jobs. The diffuse map is the
+        // cold metal and stays almost black — the scene's warm lights would
+        // otherwise lift charcoal straight to tan. The emissive map is black
+        // except along the seams, so only the cracks put out light.
+        const outerTex=track(makePetalTexture({
+            base:'#4a3a33', mid:'#241c1a', tip:'#141013', midStop:0.30,
+            vein:'rgba(90,70,62,0.5)', mottle:0.05, paleEdge:false}));
+        const outerHeat=track(makePetalTexture({
+            base:'#c94a08', mid:'#2a0901', tip:'#000000', midStop:0.20,
+            vein:'rgba(255,148,44,0.85)', midrib:'rgba(255,190,90,0.55)',
+            flames:{rgb:'255,140,40',count:6,alpha:0.5}, mottle:0, paleEdge:false}));
+        const innerTex=track(makePetalTexture({
+            base:'#5c463c', mid:'#2c211d', tip:'#1a1412', midStop:0.34,
+            vein:'rgba(105,80,68,0.5)', mottle:0.05, paleEdge:false}));
+        const innerHeat=track(makePetalTexture({
+            base:'#e07518', mid:'#3f1002', tip:'#030101', midStop:0.26,
+            vein:'rgba(255,170,60,0.9)', midrib:'rgba(255,214,132,0.6)',
+            flames:{rgb:'255,160,55',count:5,alpha:0.45}, mottle:0, paleEdge:false}));
+        // elevStart -> elevEnd sweeps around the ring, which is what fans the
+        // bloom to one side; shininess is pushed high so the seams catch a
+        // hard metal specular rather than a soft petal sheen
+        // color pulls the diffuse down hard: this scene throws a lot of warm light
+        // and cold metal has to survive it. specular is steel-white, not the warm
+        // petal specular the other flowers use.
+        const METAL={color:0x585048, specular:0x6e655c, twist:false,
+                     emissive:'#ffffff', opacity:0.99};
+        addRing(Object.assign({},METAL,{count:7,elevStart:30,elevEnd:58,
+            emissiveInt:0.62,shininess:150,texture:outerTex,emissiveMap:outerHeat,
+            jitter:0.16,flutter:0.55,
+            geo:{len:3.45,maxWidth:0.86,curl:0.30,fold:0.52,recurve:0.44,ruffle:0.30,
+                 tipPinch:0.56,widthPow:0.76,segU:40,segV:20}}));
+        addRing(Object.assign({},METAL,{count:8,azOffset:Math.PI/8,elevStart:50,elevEnd:76,
+            emissiveInt:0.68,shininess:150,texture:outerTex,emissiveMap:outerHeat,
+            jitter:0.14,flutter:0.6,
+            geo:{len:2.72,maxWidth:0.72,curl:0.34,fold:0.48,recurve:0.32,ruffle:0.26,
+                 tipPinch:0.54,widthPow:0.78,segU:36,segV:18}}));
+        addRing(Object.assign({},METAL,{count:7,azOffset:0.42,elevStart:70,elevEnd:92,
+            emissiveInt:0.72,shininess:160,texture:innerTex,emissiveMap:innerHeat,
+            jitter:0.12,flutter:0.7,
+            geo:{len:1.92,maxWidth:0.56,curl:0.40,fold:0.42,recurve:0.18,ruffle:0.20,
+                 tipPinch:0.50,widthPow:0.80,segU:32,segV:16}}));
+
+        coreGroup=new THREE.Group(); flowerGroup.add(coreGroup);
+        // the one white-hot point — the additive bloom pass turns this into the
+        // glare that sells the whole thing, so it is deliberately near-white
+        // kept small and amber rather than large and white: the bloom pass adds
+        // its own glare on top, and a white-hot ball this close to the camera
+        // washes the seams out of the inner petals entirely
+        const heart=new THREE.Mesh(track(new THREE.SphereGeometry(0.19,24,18)),
+            track(new THREE.MeshPhongMaterial({color:0xffcf94,emissive:0xff6a10,
+                emissiveIntensity:0.5,shininess:170})));
+        heart.position.y=0.30; heart.scale.y=0.88; coreGroup.add(heart);
+
+        // a bed of cooling coals packed round the heart, hottest at the centre
+        const GA=Math.PI*(3-Math.sqrt(5));
+        const coalGeo=track(new THREE.SphereGeometry(0.052,8,6));
+        const coalHot=track(new THREE.MeshPhongMaterial({color:0x3a1c10,emissive:0xff5c12,
+            emissiveIntensity:0.75,shininess:60}));
+        const coalCold=track(new THREE.MeshPhongMaterial({color:0x1c1412,emissive:0x943008,
+            emissiveIntensity:0.30,shininess:45}));
+        function coalPlacer(off){
+            return function(d,i){
+                const idx=i*2+off, r=0.62*Math.sqrt((idx+0.5)/120), a=idx*GA;
+                d.position.set(Math.cos(a)*r, 0.20-0.10*(r/0.62)*(r/0.62), Math.sin(a)*r);
+                d.rotation.y=-a;
+                d.scale.set(0.9,0.62,1.25);
+            };
+        }
+        addInstanced(coalGeo,coalHot,60,coalPlacer(0));
+        addInstanced(coalGeo,coalCold,60,coalPlacer(1));
+
+        // sparks lifting off the heart, clustered rather than evenly scattered
+        const sparkGeo=track(new THREE.SphereGeometry(0.030,6,5));
+        const sparkMat=track(new THREE.MeshPhongMaterial({color:0xffc78a,emissive:0xff7a18,
+            emissiveIntensity:0.7}));
+        const sparks=[];
+        for(let i=0;i<34;i++){
+            const a=Math.random()*Math.PI*2, rr=0.30+Math.random()*0.52;
+            sparks.push({x:Math.cos(a)*rr, z:Math.sin(a)*rr,
+                         y:0.46+Math.random()*0.62, phase:Math.random()*Math.PI*2});
+        }
+        const sparkInst=addInstanced(sparkGeo,sparkMat,34,function(d,i){
+            const s=sparks[i]; d.position.set(s.x,s.y,s.z);
+        });
+        for(let i=0;i<34;i++){ const s=sparks[i];
+            instItems.push({inst:sparkInst,index:i,x:s.x,z:s.z,baseY:s.y,phase:s.phase,sway:0.05}); }
+
+        addInnerSparkles(420,1.7,1.3,0xffa040);
+        // charred stem and leaves: this bloom has no green anywhere in it
+        const charMat=track(new THREE.MeshPhongMaterial({color:0x070505,emissive:0x0a0301,
+            shininess:22}));
+        const charLeaf=track(new THREE.MeshPhongMaterial({color:0x090706,emissive:0x0d0402,
+            shininess:26,side:THREE.DoubleSide}));
+        addStem({points:[[0,0.02,0],[0.09,-1.2,0.05],[-0.07,-2.4,-0.04],[0.03,-3.6,0]],
+            radius:0.062,mat:charMat,leafMat:charLeaf,
+            leaves:[{t:0.42,angle:0.9,len:1.9,width:0.52,tilt:-0.95},
+                    {t:0.66,angle:3.9,len:1.6,width:0.44,tilt:-1.05}]});
+    }
+
+    // A throat you can see down into. Every other flower here presents a face;
+    // these two present an opening. The rings do not fan evenly — each tier
+    // stands more upright than the one below it until the innermost leans back
+    // over the centre, so the eye is led inward and down instead of across. An
+    // open-ended tapered funnel gives that descent a surface, and the only light
+    // is at the bottom of it, which is what makes the depth read as somewhere
+    // rather than as a shadow.
+    function addThroat(cfg){
+        const tc=document.createElement('canvas'); tc.width=64; tc.height=256;
+        const tx=tc.getContext('2d');
+        const g=tx.createLinearGradient(0,256,0,0);          // 0 = floor, 1 = rim
+        cfg.stops.forEach(function(s){ g.addColorStop(s[0],s[1]); });
+        tx.fillStyle=g; tx.fillRect(0,0,64,256);
+        const tex=track(new THREE.CanvasTexture(tc)); tex.encoding=THREE.sRGBEncoding;
+        const funnel=new THREE.Mesh(
+            track(new THREE.CylinderGeometry(cfg.rim,cfg.floor,cfg.depth,36,1,true)),
+            track(new THREE.MeshPhongMaterial({map:tex,side:THREE.DoubleSide,
+                emissive:new THREE.Color(cfg.emissive),emissiveIntensity:cfg.emissiveInt||0.35,
+                shininess:cfg.shininess||70,transparent:true,opacity:0.98})));
+        funnel.position.y=cfg.y; coreGroup.add(funnel);
+        const spark=new THREE.Mesh(track(new THREE.SphereGeometry(cfg.lightR||0.13,18,14)),
+            track(new THREE.MeshPhongMaterial({color:cfg.lightC,emissive:cfg.lightE,
+                emissiveIntensity:cfg.lightI||0.9,shininess:150})));
+        spark.position.y=cfg.y-cfg.depth*0.42;
+        coreItems.push({mesh:spark,phase:0.7,baseY:spark.position.y,sway:0.018});
+        coreGroup.add(spark);
+    }
+
+    // Seraphel — tiers of gold folded around a light at the bottom of the well.
+    // Warm, ceremonial, symmetrical on purpose: where Cindervane is forged and
+    // lopsided, this one should look like it was *granted*. The rings floating
+    // above the throat are the only parts that never touch the flower.
+    function buildSeraphel(){
+        const skirt=track(makePetalTexture({base:'#4a2f06', mid:'#d9a23a', tip:'#fff4d0',
+            midStop:0.52, midrib:'rgba(255,238,186,0.38)',
+            vein:'rgba(255,242,205,0.13)', mottle:0.04, paleEdge:false}));
+        const tier=track(makePetalTexture({base:'#3a2204', mid:'#eabc52', tip:'#fffaf0',
+            midStop:0.58, midrib:'rgba(255,246,212,0.44)', mottle:0.03, paleEdge:false}));
+        // elevations climb hard — the last tier passes vertical and leans back in
+        const rings=[[13,16,3.30,0.84,skirt],[12,54,2.70,0.74,skirt],
+                     [11,90,2.05,0.60,tier],[10,114,1.34,0.46,tier],[9,130,0.94,0.36,tier]];
+        rings.forEach(function(r,i){
+            addRing({count:r[0],azOffset:i*0.29,elevStart:r[1],opacity:0.97,
+                emissive:'#9a6410',emissiveInt:0.24+i*0.04,shininess:125,texture:r[4],
+                twist:false,jitter:0.13,flutter:0.7,
+                geo:{len:r[2],maxWidth:r[3],curl:0.28,cup:0.40,recurve:i===0?0.24:0.08,
+                     fold:0.30,tipPinch:0.46,widthPow:0.80,segU:34,segV:17}});
+        });
+        coreGroup=new THREE.Group(); flowerGroup.add(coreGroup);
+        addThroat({rim:0.74,floor:0.09,depth:1.34,y:0.46,
+            stops:[[0,'#2a1803'],[0.35,'#8a5c14'],[0.72,'#e8bb56'],[1,'#fff6dc']],
+            emissive:'#a06c14',emissiveInt:0.40,
+            lightC:0xfff2cf,lightE:0xffb02a,lightI:0.95,lightR:0.15});
+        const halo=new THREE.Mesh(track(new THREE.TorusGeometry(1.04,0.026,8,72)),
+            track(new THREE.MeshPhongMaterial({color:0xfff0c4,emissive:0xffc04a,
+                emissiveIntensity:0.85,shininess:180})));
+        halo.rotation.x=Math.PI/2-0.16; halo.position.y=1.50; coreGroup.add(halo);
+        const halo2=new THREE.Mesh(track(new THREE.TorusGeometry(0.62,0.016,8,64)),
+            track(new THREE.MeshPhongMaterial({color:0xfff6de,emissive:0xffcf6a,
+                emissiveIntensity:0.7,shininess:180})));
+        halo2.rotation.x=Math.PI/2+0.22; halo2.position.y=1.80; coreGroup.add(halo2);
+        // motes rising out of the throat, not scattered over the whole flower
+        const moteGeo=track(new THREE.SphereGeometry(0.026,6,5));
+        const moteMat=track(new THREE.MeshPhongMaterial({color:0xfff0c8,emissive:0xffbe4a,
+            emissiveIntensity:0.9}));
+        const motes=[];
+        for(let i=0;i<28;i++){
+            const a=Math.random()*Math.PI*2, rr=0.06+Math.random()*0.30;
+            motes.push({x:Math.cos(a)*rr,z:Math.sin(a)*rr,
+                        y:0.55+Math.random()*0.95,phase:Math.random()*Math.PI*2});
+        }
+        const moteInst=addInstanced(moteGeo,moteMat,28,function(d,i){
+            const m=motes[i]; d.position.set(m.x,m.y,m.z);
+        });
+        for(let i=0;i<28;i++){ const m=motes[i];
+            instItems.push({inst:moteInst,index:i,x:m.x,z:m.z,baseY:m.y,phase:m.phase,sway:0.075}); }
+        addInnerSparkles(520,1.5,1.6,0xffd884);
+        addStem({points:[[0,0.02,0],[0.05,-1.2,0.03],[-0.05,-2.4,-0.02],[0.02,-3.6,0]],radius:0.058,
+            leaves:[{t:0.44,angle:0.8,len:1.8,width:0.5,tilt:-1.0},
+                    {t:0.66,angle:3.8,len:1.5,width:0.44,tilt:-1.1}]});
+    }
+
+    // Theophane — the same deep-well idea taken cold. Pearl and violet instead of
+    // gold, the well ending in a pale eye rather than a flame, with shards
+    // standing off the rim like something is arriving through it.
+    function buildTheophane(){
+        const outerT=track(makePetalTexture({base:'#221741', mid:'#7466cc', tip:'#eee9ff',
+            midStop:0.46, midrib:'rgba(238,232,255,0.34)',
+            vein:'rgba(226,218,255,0.16)', mottle:0.04, paleEdge:false}));
+        const innerT=track(makePetalTexture({base:'#180f30', mid:'#9689e2', tip:'#f8f5ff',
+            midStop:0.52, midrib:'rgba(246,242,255,0.40)', mottle:0.03, paleEdge:false}));
+        const rings=[[14,10,3.55,0.70,outerT],[13,48,2.95,0.60,outerT],
+                     [12,86,2.20,0.48,innerT],[11,110,1.42,0.36,innerT],[10,128,0.98,0.28,innerT]];
+        rings.forEach(function(r,i){
+            addRing({count:r[0],azOffset:i*0.33,elevStart:r[1],opacity:0.96,
+                emissive:'#4a3f8c',emissiveInt:0.20+i*0.05,shininess:135,texture:r[4],
+                twist:false,jitter:0.12,flutter:0.85,
+                geo:{len:r[2],maxWidth:r[3],curl:0.26,cup:0.34,recurve:i===0?0.30:0.06,
+                     fold:0.26,ruffle:i<2?0.14:0,tipPinch:0.62,widthPow:0.72,segU:34,segV:17}});
+        });
+        coreGroup=new THREE.Group(); flowerGroup.add(coreGroup);
+        addThroat({rim:0.68,floor:0.07,depth:1.46,y:0.50,
+            stops:[[0,'#0d0820'],[0.32,'#3b2f74'],[0.70,'#9d92e4'],[1,'#f4f1ff']],
+            emissive:'#5b4ea8',emissiveInt:0.34,
+            lightC:0xf6f2ff,lightE:0xbfa8ff,lightI:1.0,lightR:0.12});
+        const iris=new THREE.Mesh(track(new THREE.TorusGeometry(0.25,0.034,10,48)),
+            track(new THREE.MeshPhongMaterial({color:0xece7ff,emissive:0x8f7ce8,
+                emissiveIntensity:0.75,shininess:160})));
+        iris.rotation.x=Math.PI/2; iris.position.y=0.04; coreGroup.add(iris);
+        const shardGeo=track(new THREE.ConeGeometry(0.035,0.95,4));
+        const shardMat=track(new THREE.MeshPhongMaterial({color:0xe6e0ff,emissive:0x7d6ad4,
+            emissiveIntensity:0.6,shininess:150,transparent:true,opacity:0.85}));
+        addInstanced(shardGeo,shardMat,16,function(d,i){
+            const a=(i/16)*Math.PI*2, lean=0.30+0.18*Math.cos(a);
+            d.position.set(Math.cos(a)*0.80,1.18+0.30*Math.cos(a),Math.sin(a)*0.80);
+            d.rotation.set(Math.sin(a)*lean,-a,-Math.cos(a)*lean);
+            d.scale.setScalar(0.72+0.42*(0.5+0.5*Math.cos(a)));
+        });
+        addInnerSparkles(560,1.5,1.8,0xcdbdff);
+        addStem({points:[[0,0.02,0],[0.04,-1.2,0.04],[-0.06,-2.4,-0.02],[0.02,-3.6,0]],radius:0.055,
+            leaves:[{t:0.46,angle:1.1,len:1.7,width:0.46,tilt:-1.05},
+                    {t:0.68,angle:4.0,len:1.4,width:0.40,tilt:-1.1}]});
+    }
+
     const FLOWERS = {
+        seraphel:  { label:'Seraphel',        latin:'Aurum seraphicum',        build:buildSeraphel,
+                     open:0.34, glow:0xffc861, aura:0xffd88a, glowBoost:1.15,
+                     desc:'Nine tiers of gold, folded around a light that was given, not lit.',
+                     motion:{shimmer:1.5, pulse:0.024, pulses:0.5, ripple:0.016, rippleS:0.6,
+                             byRing:true, bob:0.035, bobs:0.42, nx:0.025, nxs:0.32} },
+        theophane: { label:'Theophane',       latin:'Lux theophana',           build:buildTheophane,
+                     open:0.34, glow:0xc9b6ff, aura:0xa88fff, glowBoost:1.25,
+                     desc:'Something is arriving. The flower is only the door.',
+                     motion:{shimmer:1.7, pulse:0.03, pulses:0.42, ripple:0.02, rippleS:0.55,
+                             byRing:true, nx:0.03, nxs:0.3, nz:0.025, nzs:0.26} },
         peony:     { label:'Peony',           latin:'Paeonia lactiflora',      build:buildPeony,
                      open:0.66, glow:0xffbb88, aura:0xdfa8ff,
                      desc:'A thousand silk skirts unfurling in the dark.',
@@ -1606,14 +1861,20 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
                      open:1.1, glow:0xffaaff, aura:0xff88cc,
                      desc:'Press ✨ to grow a flower that has never existed before.',
                      motion:{nx:0.05, nz:0.04, bob:0.05, pulse:0.02} },
+        cindervane:{ label:'Cindervane',      latin:'Ferrocalyx ardens',       build:buildCindervane,
+                     open:0.5,  glow:0xff7a2a, aura:0xff4d1a, glowBoost:0.95,
+                     desc:'It cooled into metal, and went on burning anyway.',
+                     motion:{shimmer:1.9, ripple:0.022, rippleS:1.5, byRing:true,
+                             pulse:0.022, pulses:0.9, nx:0.04, nxs:0.4, nz:0.03, nzs:0.34} },
         ember:     { label:'Ember',           latin:'Flamma caerulea',         build:buildEmber,
                      open:0.66, glow:EMBER_GLOW, aura:0x3f7fe8,
                      desc:'A flame that forgot how to burn warm.',
                      motion:{nx:0.05, nxs:0.42, nz:0.04, nzs:0.36, bob:0.045, bobs:0.5,
                              ripple:0.022, rippleS:0.7, shimmer:1.2} }
     };
-    const ORDER=['dream','ember','peony','rose','dahlia','orchid','lotus','sunflower','cherry','morningglory',
-                 'cereus','dicentra','tulip','lily','anemone','ranunculus'];
+    const ORDER=['dream','seraphel','theophane','cindervane','ember','peony','rose','dahlia','orchid',
+                 'lotus','sunflower','cherry','morningglory','cereus','dicentra','tulip','lily',
+                 'anemone','ranunculus'];
 
     // ---------------- Ground aura ----------------
     let auraMat;

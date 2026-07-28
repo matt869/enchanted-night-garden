@@ -3,7 +3,7 @@
  * Makes the garden installable and fully usable offline. Bump CACHE whenever
  * a precached file changes; the old cache is dropped on activate.
  */
-const CACHE = 'night-garden-v4';
+const CACHE = 'night-garden-v5';
 
 /* Everything the garden needs to open with no network at all. Audio is left
  * out on purpose — it can be large, and it is cached on first play instead. */
