@@ -275,8 +275,13 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
     // only ever applied to the final full-screen quad, which cannot alias.
     const MOBILE = (window.matchMedia && window.matchMedia('(pointer:coarse)').matches) ||
                    /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    // 'low-power' is right on a phone and wrong everywhere else: on a laptop or
+    // desktop with switchable graphics it is an explicit request for the
+    // integrated GPU, so the scene was being handed to the weaker of the two
+    // chips on exactly the machines that have a better one sitting idle.
     const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: !MOBILE,
-                                               powerPreference: 'low-power' });
+                                               powerPreference: MOBILE ? 'low-power'
+                                                                       : 'high-performance' });
     renderer.setSize(w, h);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, MOBILE ? 1.5 : 2));
     renderer.shadowMap.enabled = true;
@@ -643,13 +648,30 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
     // ---------------- State ----------------
     const flowerGroup = new THREE.Group();
     scene.add(flowerGroup);
-    let petalItems=[], coreItems=[], coreGroup=null, disposables=[], bloomT=1,
-        bloomDir=1, currentFlower='peony', ringCounter=0;
+    let petalItems=[], coreItems=[], petalRings=[], instItems=[], coreGroup=null,
+        disposables=[], bloomT=1, bloomDir=1, currentFlower='peony', ringCounter=0;
     function track(o){ disposables.push(o); return o; }
     function clearFlower(){
         while(flowerGroup.children.length) flowerGroup.remove(flowerGroup.children[0]);
         disposables.forEach(function(d){ if(d.dispose) d.dispose(); });
-        disposables=[]; petalItems=[]; coreItems=[]; coreGroup=null; bloomT=0; ringCounter=0;
+        disposables=[]; petalItems=[]; coreItems=[]; petalRings=[]; instItems=[];
+        coreGroup=null; bloomT=0; ringCounter=0;
+    }
+
+    // Draws `count` copies of one small mesh in a single call. The seed heads and
+    // stamen fields were hundreds of separate meshes each; they are static once
+    // placed, so they cost nothing but draw calls, which this removes.
+    function addInstanced(geo, mat, count, place, parent){
+        const inst=track(new THREE.InstancedMesh(geo,mat,count));
+        const d=new THREE.Object3D();
+        for(let i=0;i<count;i++){
+            d.position.set(0,0,0); d.rotation.set(0,0,0); d.scale.set(1,1,1);
+            place(d,i);
+            d.updateMatrix(); inst.setMatrixAt(i,d.matrix);
+        }
+        inst.castShadow=true; inst.receiveShadow=true; inst.frustumCulled=false;
+        (parent||coreGroup).add(inst);
+        return inst;
     }
 
     function addInnerSparkles(n, spreadXZ, spreadY, color) {
@@ -666,34 +688,47 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         }))));
     }
 
+    // A ring is one InstancedMesh, not one mesh per petal. Every petal in a ring
+    // already shared its geometry and had an identical material; only the
+    // transform differed, and a transform is exactly what an instance is. The
+    // render is unchanged down to the pixel — a peony simply stops issuing a
+    // hundred draw calls (two hundred, counting the shadow pass) to draw itself.
+    // The nested azimuth/elevation Groups are gone too: their product is composed
+    // straight into the instance matrix in the animation loop, which is less
+    // matrix work per frame than the three Object3Ds it replaces.
+    const _mA=new THREE.Matrix4(), _mB=new THREE.Matrix4(), _eul=new THREE.Euler(),
+          _quat=new THREE.Quaternion(), _vZero=new THREE.Vector3(0,0,0), _vScale=new THREE.Vector3();
     function addRing(cfg) {
         const geo = track(createPetalGeometry(cfg.geo));
-        const tex = cfg.texture;
         const thisRingPhase = ringCounter++;
+        const mat=track(new THREE.MeshPhongMaterial({
+            map:cfg.texture, color:0xffffff,
+            emissive:new THREE.Color(cfg.emissive),
+            emissiveIntensity:cfg.emissiveInt!==undefined?cfg.emissiveInt:0.2,
+            shininess:cfg.shininess!==undefined?cfg.shininess:110, specular:0xffe6cc,
+            transparent:true, opacity:cfg.opacity, side:THREE.DoubleSide
+        }));
+        const inst=track(new THREE.InstancedMesh(geo,mat,cfg.count));
+        inst.castShadow=true; inst.receiveShadow=true;
+        // Instances sit metres away from the geometry's own bounding sphere, so the
+        // automatic bounds would cull the ring the moment the camera swings round.
+        inst.frustumCulled=false;
+        inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        flowerGroup.add(inst); petalRings.push(inst);
+
         for (let i=0;i<cfg.count;i++){
             const angle=(i/cfg.count)*Math.PI*2 + (cfg.azOffset||0);
-            const azimuthGroup=new THREE.Group(); azimuthGroup.rotation.y=angle;
-            const elevationGroup=new THREE.Group();
             const elevation = cfg.elevStart + ((cfg.elevEnd!==undefined?cfg.elevEnd:cfg.elevStart)-cfg.elevStart)*(i/cfg.count);
-            elevationGroup.rotation.x=-elevation*Math.PI/180;
 
-            const mat=track(new THREE.MeshPhongMaterial({
-                map:tex, color:0xffffff,
-                emissive:new THREE.Color(cfg.emissive),
-                emissiveIntensity:cfg.emissiveInt!==undefined?cfg.emissiveInt:0.2,
-                shininess:cfg.shininess!==undefined?cfg.shininess:110, specular:0xffe6cc,
-                transparent:true, opacity:cfg.opacity, side:THREE.DoubleSide
-            }));
-            const mesh=new THREE.Mesh(geo,mat);
-            mesh.scale.setScalar((cfg.scale||1)*(0.92+Math.random()*(cfg.jitter!==undefined?cfg.jitter:0.16)));
-            mesh.scale.x*=0.94+Math.random()*0.12;   // organic asymmetry
-            mesh.rotation.z=(Math.random()-0.5)*0.07;
-            mesh.castShadow=true; mesh.receiveShadow=true;
-            elevationGroup.add(mesh); azimuthGroup.add(elevationGroup); flowerGroup.add(azimuthGroup);
+            // the per-petal scale jitter and z-twist never change, so bake them once
+            const s=(cfg.scale||1)*(0.92+Math.random()*(cfg.jitter!==undefined?cfg.jitter:0.16));
+            _vScale.set(s*(0.94+Math.random()*0.12), s, s);   // organic asymmetry
+            _quat.setFromAxisAngle(new THREE.Vector3(0,0,1),(Math.random()-0.5)*0.07);
+            const local=new THREE.Matrix4().compose(_vZero,_quat,_vScale);
 
             petalItems.push({
-                group:elevationGroup, baseElevation:-elevation*Math.PI/180,
-                windOffset:Math.random()*Math.PI*2, azimuthGroup:azimuthGroup,
+                inst:inst, index:i, local:local, baseElevation:-elevation*Math.PI/180,
+                windOffset:Math.random()*Math.PI*2,
                 bloomOffset:angle, twist:cfg.twist!==false, twistAmt:cfg.twistAmt||0.9,
                 flutter:cfg.flutter!==undefined?cfg.flutter:1, ringPhase:thisRingPhase
             });
@@ -765,17 +800,27 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         const aGeo=track(new THREE.SphereGeometry(0.055,10,10));
         const fMat=track(new THREE.MeshPhongMaterial({color:0xffcc88,emissive:0x552200}));
         const aMat=track(new THREE.MeshPhongMaterial({color:0xffd24d,emissive:0xff7711,emissiveIntensity:0.9}));
+        // Placed in one pass, then drawn as two instanced meshes rather than 440
+        // separate ones. The randoms are drawn in their original order so the
+        // scatter comes out exactly as before.
+        const stam=[];
         for(let i=0;i<220;i++){
             const angle=Math.random()*Math.PI*2, rad=0.40+Math.random()*0.36;
             const x=Math.cos(angle)*rad, z=Math.sin(angle)*rad, y=0.16+Math.random()*0.44;
-            const f=new THREE.Mesh(fGeo,fMat); f.position.set(x,y,z);
-            f.rotation.z=Math.atan2(z,x); f.rotation.x=0.5+Math.random()*0.6;
-            coreGroup.add(f);
-            const a=new THREE.Mesh(aGeo,aMat);
-            a.position.set(x+Math.cos(angle)*0.15,y+0.34,z+Math.sin(angle)*0.15);
-            coreItems.push({mesh:a,phase:Math.random()*Math.PI*2,baseY:a.position.y,sway:0.02});
-            coreGroup.add(a);
+            stam.push({x:x,y:y,z:z,rotX:0.5+Math.random()*0.6,
+                       ax:x+Math.cos(angle)*0.15, ay:y+0.34, az:z+Math.sin(angle)*0.15,
+                       phase:Math.random()*Math.PI*2});
         }
+        addInstanced(fGeo,fMat,220,function(d,i){
+            const s=stam[i];
+            d.position.set(s.x,s.y,s.z);
+            d.rotation.set(s.rotX,0,Math.atan2(s.z,s.x));
+        });
+        const anthInst=addInstanced(aGeo,aMat,220,function(d,i){
+            const s=stam[i]; d.position.set(s.ax,s.ay,s.az);
+        });
+        for(let i=0;i<220;i++){ const s=stam[i];
+            instItems.push({inst:anthInst,index:i,x:s.ax,z:s.az,baseY:s.ay,phase:s.phase,sway:0.02}); }
         addInnerSparkles(800,1.4,1.0,0xffcc88);
         simpleStem();
     }
@@ -1244,34 +1289,43 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         // Seed count scales with disk area so the packing density stays constant
         // as the centre grows -- otherwise a bigger disk just looks sparse.
         const SEEDS=580, RMAX=1.26;
-        for(let i=0;i<SEEDS;i++){
-            const r=RMAX*Math.sqrt((i+0.5)/SEEDS);   // sqrt keeps the packing even
-            const a=i*GA, rn=r/RMAX;
-            const s=new THREE.Mesh(seedGeo,(i%2)?seedMatA:seedMatB);
-            s.position.set(Math.cos(a)*r, 0.31-0.15*rn*rn, Math.sin(a)*r);
-            s.rotation.y=-a;                         // long axis follows the spiral
-            s.scale.set(0.80,0.62,1.40);
-            coreGroup.add(s);
+        // The two seed tones alternate, so they become two instanced draws rather
+        // than 580 meshes. `off` walks every other index to keep the original
+        // odd/even colouring and the exact same golden-angle placement.
+        function seedPlacer(off){
+            return function(d,i){
+                const idx=i*2+off;
+                const r=RMAX*Math.sqrt((idx+0.5)/SEEDS);   // sqrt keeps the packing even
+                const a=idx*GA, rn=r/RMAX;
+                d.position.set(Math.cos(a)*r, 0.31-0.15*rn*rn, Math.sin(a)*r);
+                d.rotation.y=-a;                           // long axis follows the spiral
+                d.scale.set(0.80,0.62,1.40);
+            };
         }
+        addInstanced(seedGeo,seedMatB,Math.ceil(SEEDS/2), seedPlacer(0));
+        addInstanced(seedGeo,seedMatA,Math.floor(SEEDS/2),seedPlacer(1));
 
         // Disk florets: every "seed" is really a tiny tubular flower. A band of
         // them stands open across the outer disk, which is what gives the centre
         // its velvet texture instead of a bare plate.
         const florGeo=track(new THREE.CylinderGeometry(0.020,0.030,0.10,6));
         const florMat=track(new THREE.MeshPhongMaterial({color:0x7d4c1a,emissive:0x2c1707,shininess:40}));
-        for(let i=0;i<190;i++){
+        addInstanced(florGeo,florMat,190,function(d,i){
             const r=RMAX*Math.sqrt(0.34+0.66*((i+0.5)/190));
             const a=i*GA, rn=r/RMAX;
-            const fl=new THREE.Mesh(florGeo,florMat);
-            fl.position.set(Math.cos(a)*r, 0.345-0.15*rn*rn, Math.sin(a)*r);
-            coreGroup.add(fl);
-        }
+            d.position.set(Math.cos(a)*r, 0.345-0.15*rn*rn, Math.sin(a)*r);
+        });
         const flMat=track(new THREE.MeshPhongMaterial({color:0xffcc44,emissive:0xcc8800,emissiveIntensity:0.6}));
         const flGeo=track(new THREE.SphereGeometry(0.035,8,8));
-        // ring of open golden florets right at the disk rim
+        // ring of open golden florets right at the disk rim — these bob, so they
+        // keep their animation through the instance matrix instead of a Mesh each
+        const rimInst=addInstanced(flGeo,flMat,62,function(d,i){
+            const a=(i/62)*Math.PI*2;
+            d.position.set(Math.cos(a)*1.29,0.22,Math.sin(a)*1.29);
+        });
         for(let i=0;i<62;i++){ const a=(i/62)*Math.PI*2;
-            const f=new THREE.Mesh(flGeo,flMat); f.position.set(Math.cos(a)*1.29,0.22,Math.sin(a)*1.29);
-            coreItems.push({mesh:f,phase:i*0.4,baseY:0.22,sway:0.02}); coreGroup.add(f); }
+            instItems.push({inst:rimInst,index:i,x:Math.cos(a)*1.29,z:Math.sin(a)*1.29,
+                            baseY:0.22,phase:i*0.4,sway:0.02}); }
         addInnerSparkles(600,2.4,0.8,0xffd870);
         addStem({points:[[0,0.02,0],[0.06,-1.2,0.04],[-0.05,-2.4,0],[0.02,-3.6,0]],radius:0.075,
             leaves:[{t:0.45,angle:1.0,len:2.4,width:1.1,tilt:-0.85},{t:0.65,angle:4.1,len:2.1,width:0.95,tilt:-0.95}]});
@@ -1348,16 +1402,25 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         const aG=track(new THREE.SphereGeometry(0.032,8,8));
         const aM=track(new THREE.MeshPhongMaterial({color:0x2a2444,emissive:0x141033,emissiveIntensity:0.6,
             shininess:120,specular:0x9999ff}));
+        const fil=[];
         for(let i=0;i<110;i++){
             const a=Math.random()*Math.PI*2, rr=0.32+Math.random()*0.16;
-            const f=new THREE.Mesh(fG,fM);
-            f.position.set(Math.cos(a)*rr*0.8,0.28,Math.sin(a)*rr*0.8);
-            f.rotation.z=Math.cos(a)*0.55; f.rotation.x=Math.sin(a)*0.55;
-            coreGroup.add(f);
-            const an=new THREE.Mesh(aG,aM);
-            an.position.set(Math.cos(a)*(rr+0.1),0.5,Math.sin(a)*(rr+0.1));
-            if(i%3===0) coreItems.push({mesh:an,phase:Math.random()*6.28,baseY:0.5,sway:0.02});
-            coreGroup.add(an);
+            fil.push({a:a,rr:rr,phase:(i%3===0)?Math.random()*6.28:0});
+        }
+        addInstanced(fG,fM,110,function(d,i){
+            const f=fil[i];
+            d.position.set(Math.cos(f.a)*f.rr*0.8,0.28,Math.sin(f.a)*f.rr*0.8);
+            d.rotation.set(Math.sin(f.a)*0.55,0,Math.cos(f.a)*0.55);
+        });
+        const anInst=addInstanced(aG,aM,110,function(d,i){
+            const f=fil[i];
+            d.position.set(Math.cos(f.a)*(f.rr+0.1),0.5,Math.sin(f.a)*(f.rr+0.1));
+        });
+        for(let i=0;i<110;i++){
+            if(i%3!==0) continue;
+            const f=fil[i];
+            instItems.push({inst:anInst,index:i,x:Math.cos(f.a)*(f.rr+0.1),z:Math.sin(f.a)*(f.rr+0.1),
+                            baseY:0.5,phase:f.phase,sway:0.02});
         }
         addInnerSparkles(500,0.9,0.6,0xff8899);
         simpleStem(0.9,4.0);
@@ -1431,26 +1494,30 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
             const sg=track(new THREE.SphereGeometry(0.05,8,6));
             const sm=track(new THREE.MeshPhongMaterial({color:0x2a1020, emissive:glow,
                 emissiveIntensity:0.35, shininess:60}));
-            for(let i=0;i<140;i++){
+            addInstanced(sg,sm,140,function(d,i){
                 const r=0.06+0.4*Math.sqrt(i/140), a=i*GA;
-                const s=new THREE.Mesh(sg,sm);
-                s.position.set(Math.cos(a)*r,0.34+Math.sin(i)*0.004,Math.sin(a)*r);
-                s.scale.setScalar(0.5+0.7*Math.sqrt(i/140)); coreGroup.add(s);
-            }
+                d.position.set(Math.cos(a)*r,0.34+Math.sin(i)*0.004,Math.sin(a)*r);
+                d.scale.setScalar(0.5+0.7*Math.sqrt(i/140));
+            });
         } else {
             const fg=track(new THREE.CylinderGeometry(0.012,0.018,0.6,5));
             const fm=track(new THREE.MeshPhongMaterial({color:0xfff0c8, emissive:0x664411, shininess:80}));
             const ag=track(new THREE.SphereGeometry(0.05,8,6));
             const am=track(new THREE.MeshPhongMaterial({color:0xffe9a8, emissive:glow,
                 emissiveIntensity:0.6}));
+            addInstanced(fg,fm,26,function(d,i){
+                const a=i/26*Math.PI*2, r=0.16+((i%3)*0.05);
+                d.position.set(Math.cos(a)*r,0.42,Math.sin(a)*r);
+                d.rotation.set(-Math.sin(a)*0.5,0,Math.cos(a)*0.5);
+            });
+            const anthers=addInstanced(ag,am,26,function(d,i){
+                const a=i/26*Math.PI*2, r=0.16+((i%3)*0.05);
+                d.position.set(Math.cos(a)*(r+0.10),0.70,Math.sin(a)*(r+0.10));
+            });
             for(let i=0;i<26;i++){
                 const a=i/26*Math.PI*2, r=0.16+((i%3)*0.05);
-                const st=new THREE.Mesh(fg,fm);
-                st.position.set(Math.cos(a)*r,0.42,Math.sin(a)*r);
-                st.rotation.z=Math.cos(a)*0.5; st.rotation.x=-Math.sin(a)*0.5; coreGroup.add(st);
-                const an=new THREE.Mesh(ag,am);
-                an.position.set(Math.cos(a)*(r+0.10),0.70,Math.sin(a)*(r+0.10)); coreGroup.add(an);
-                if(i%4===0) coreItems.push({mesh:an, baseY:an.position.y, phase:a*2, sway:0.03});
+                if(i%4===0) instItems.push({inst:anthers, index:i, x:Math.cos(a)*(r+0.10),
+                                            z:Math.sin(a)*(r+0.10), baseY:0.70, phase:a*2, sway:0.03});
             }
         }
         addInnerSparkles(60,1.1,0.8,glow);
@@ -1690,18 +1757,24 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
     })();
     const grassMat=new THREE.MeshBasicMaterial({map:grassTex,transparent:true,opacity:0.85,
         side:THREE.DoubleSide,depthWrite:false});
-    const blades=[];
+    // One instanced draw for the whole lawn. A blade used to be its own
+    // PlaneGeometry sized w x h and shifted up by h/2; that is exactly a unit
+    // plane with its base at the origin, scaled by (w,h) — so the blades come out
+    // the same shape and in the same places, at 1/90th the draw calls.
+    const bladeGeo=new THREE.PlaneGeometry(1,1); bladeGeo.translate(0,0.5,0);
+    const grassInst=new THREE.InstancedMesh(bladeGeo,grassMat,90);
+    grassInst.frustumCulled=false;
+    grassInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    const blades=[], _bladeD=new THREE.Object3D();
     for(let i=0;i<90;i++){
         const hgt=0.5+Math.random()*1.2;
-        const gGeo=new THREE.PlaneGeometry(0.055+Math.random()*0.05,hgt);
-        gGeo.translate(0,hgt/2,0);
-        const b=new THREE.Mesh(gGeo,grassMat);
+        const wid=0.055+Math.random()*0.05;
         const a=Math.random()*Math.PI*2, rr=1.4+Math.random()*3.4;
-        b.position.set(Math.cos(a)*rr,-4.0,Math.sin(a)*rr);
-        b.rotation.y=Math.random()*Math.PI;
-        blades.push({m:b,ph:Math.random()*Math.PI*2,amp:0.06+Math.random()*0.1,base:(Math.random()-0.5)*0.25});
-        scene.add(b);
+        const rotY=Math.random()*Math.PI;
+        blades.push({i:i,x:Math.cos(a)*rr,z:Math.sin(a)*rr,w:wid,h:hgt,rotY:rotY,
+            ph:Math.random()*Math.PI*2,amp:0.06+Math.random()*0.1,base:(Math.random()-0.5)*0.25});
     }
+    scene.add(grassInst);
 
     // small etched marker rendered onto a leaf near the base — a keepsake for the curious
     (function(){
@@ -2485,13 +2558,20 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
     hideBtn.addEventListener('click',toggleHide);
 
     // ---------------- Animate ----------------
-    // Frame pacing. Left alone, requestAnimationFrame runs as fast as the
-    // display: 120Hz on a ProMotion iPhone, which doubles the GPU work of an
-    // already fill-rate-heavy scene and gets the phone hot within minutes.
-    // So we cap it, and once nobody has touched anything for a few seconds we
-    // halve it again — the garden only drifts when idle, and 30fps is plenty
-    // for drifting. Any real input snaps it straight back to full rate.
-    const FPS_ACTIVE=60, FPS_IDLE=30, IDLE_AFTER_MS=5000;
+    // Frame pacing. Phones still need the cap: left alone, requestAnimationFrame
+    // runs as fast as the display — 120Hz on a ProMotion iPhone, which doubles
+    // the GPU work of an already fill-rate-heavy scene and gets the phone hot
+    // within minutes. So there it stays capped, and drops again once nobody has
+    // touched anything, because the garden is only drifting by then.
+    //
+    // On a desktop that same cap was the single worst thing about how this felt.
+    // A fixed millisecond budget does not divide evenly into a 144Hz refresh, so
+    // the renderer landed on every third vsync — 48fps, not the 60 it thought it
+    // was pacing — and after five idle seconds it halved to a visible 29fps
+    // stutter while you were sitting there watching it. Uncapped, every frame is
+    // vsync-aligned and evenly spaced, which is what smooth actually means. The
+    // scene has the headroom: it renders in about 7ms.
+    const FPS_ACTIVE=MOBILE?60:0, FPS_IDLE=MOBILE?30:0, IDLE_AFTER_MS=5000;
     let lastNow=performance.now(), lastInput=lastNow, paused=false;
 
     function noteInput(){ lastInput=performance.now(); }
@@ -2508,8 +2588,8 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         if(paused) return;                 // resumed by visibilitychange
         requestAnimationFrame(animate);
         const nowMs=performance.now();
-        const budget=1000/((nowMs-lastInput>IDLE_AFTER_MS)?FPS_IDLE:FPS_ACTIVE)-1;
-        if(nowMs-lastNow<budget) return;   // too early — skip, keeps lastNow honest
+        const cap=(nowMs-lastInput>IDLE_AFTER_MS)?FPS_IDLE:FPS_ACTIVE;
+        if(cap && nowMs-lastNow<1000/cap-1) return;   // too early — skip, keeps lastNow honest
         let dtReal=(nowMs-lastNow)/1000; lastNow=nowMs;
         if(dtReal>0.1) dtReal=0.1;
         // Everything below was written assuming a 60fps frame. fs restates each
@@ -2536,12 +2616,28 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
                 const phase = m.byRing ? -p.ringPhase*1.3 : p.windOffset*(m.windF||1);
                 flutter += m.ripple*Math.sin(time*(m.rippleS||0.8)+phase);
             }
-            p.group.rotation.x=p.baseElevation*(1-dynamicOpen)+flutter;
+            const elevX=p.baseElevation*(1-dynamicOpen)+flutter;
             const wy=Math.sin(time*0.55+p.windOffset*1.2)*0.009;
-            p.azimuthGroup.rotation.z=wy*0.6+Math.sin(time*0.9+p.windOffset)*0.005;
-            p.azimuthGroup.rotation.x=wy*0.4;
-            if(p.twist) p.azimuthGroup.rotation.y=p.bloomOffset+dynamicBloom*p.twistAmt*Math.sin(p.bloomOffset);
+            const azX=wy*0.4;
+            const azZ=wy*0.6+Math.sin(time*0.9+p.windOffset)*0.005;
+            const azY=p.twist ? p.bloomOffset+dynamicBloom*p.twistAmt*Math.sin(p.bloomOffset)
+                              : p.bloomOffset;
+            if(p.inst){
+                // azimuth * elevation * (baked scale and twist) — the same product
+                // the three nested Groups used to build, done in one place.
+                _eul.set(azX,azY,azZ);
+                _mA.makeRotationFromEuler(_eul);
+                _mB.makeRotationX(elevX);
+                _mA.multiply(_mB).multiply(p.local);
+                p.inst.setMatrixAt(p.index,_mA);
+            } else {                       // orchid: hand-placed petals, still Groups
+                p.group.rotation.x=elevX;
+                p.azimuthGroup.rotation.x=azX;
+                p.azimuthGroup.rotation.z=azZ;
+                if(p.twist) p.azimuthGroup.rotation.y=azY;
+            }
         }
+        for(let k=0;k<petalRings.length;k++) petalRings[k].instanceMatrix.needsUpdate=true;
 
         const shim=m.shimmer||1;
         for(let k=0;k<coreItems.length;k++){
@@ -2553,6 +2649,12 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
                 c.mesh.position.y=c.baseY+Math.sin(time*2.2*shim+c.phase)*(c.sway||0.02);
                 if(c.baseRotZ!==undefined) c.mesh.rotation.z=c.baseRotZ+Math.sin(time*1.7+c.phase)*0.06*shim;
             }
+        }
+        for(let k=0;k<instItems.length;k++){
+            const c=instItems[k];
+            _mA.makeTranslation(c.x, c.baseY+Math.sin(time*2.2*shim+c.phase)*c.sway, c.z);
+            c.inst.setMatrixAt(c.index,_mA);
+            c.inst.instanceMatrix.needsUpdate=true;
         }
 
         if(coreGroup){
@@ -2624,8 +2726,14 @@ const NIGHT_AUDIO_VOLUME = 1.0;   /* 0 = silent .. 1 = full */
         // grass sways
         for(let i=0;i<blades.length;i++){
             const bb=blades[i];
-            bb.m.rotation.z=bb.base+Math.sin(time*0.9+bb.ph)*bb.amp*(1+windKick*2.5)-windKick*0.15;
+            _bladeD.position.set(bb.x,-4.0,bb.z);
+            _bladeD.rotation.set(0,bb.rotY,
+                bb.base+Math.sin(time*0.9+bb.ph)*bb.amp*(1+windKick*2.5)-windKick*0.15);
+            _bladeD.scale.set(bb.w,bb.h,1);
+            _bladeD.updateMatrix();
+            grassInst.setMatrixAt(bb.i,_bladeD.matrix);
         }
+        grassInst.instanceMatrix.needsUpdate=true;
 
         // shooting stars
         for(let i=0;i<shooters.length;i++){
